@@ -11199,3 +11199,705 @@ full pytest: 189 passed, 1633 warnings
 一句话：**平台现在已经“能打”了，但还没到“结果可以闭眼信”的程度。**
 
 > 好的，请设计实验计划，并自行实验，最终报告结果
+
+<details><summary>15 previous messages</summary>
+
+> 我先用现有产物和命令清单把实验计划落到当前真实状态上：重点看已经生成的 native test60 报告、certification、以及现在还缺哪些可量化维度。Plan Mode 下我不会改文件或真正开启新一轮实验，只做只读核对，然后给出可直接执行的实验计划。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 .tmp\retrieval_lab\fuzzy_multi_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 .tmp\retrieval_lab\migration_certification_final_native_core.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 .tmp\retrieval_lab\evaluate_hybrid_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 .tmp\retrieval_lab\rerank_upper_test60_native.json`
+>
+> </details>
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先把现有 `retreieval_lab` 的认证结果和几份核心报告读一遍，这样实验计划会贴着当前真实短板走，而不是凭感觉开药。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `git status --short`
+> - Ran `Get-ChildItem -Path .tmp\retrieval_lab -Filter *.json | Select-Object -ExpandProperty Name`
+> - Ran `Get-Content -Raw .tmp\retrieval_lab\migration_certification_final_native_core.json`
+>
+> </details>
+>
+> 认证状态本身很强：核心替代覆盖已经是 `1.0`，但报告也暴露了几个下一轮该盯的点：qrels 可信度低、fuzzy 的 stage/purpose 命中弱、top1/top2 margin 很小。接下来我把这些指标抽出来，计划会围绕“可信评测 + LLM 裁判小样本 + rerank 上限验证”来设计。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `$j = Get-Content -Raw .tmp\retrieval_lab\evaluate_hybrid_test60_native.json | ConvertFrom-Json; $j.summary | ConvertTo-Json -Depth 5`
+> - Ran `$j = Get-Content -Raw .tmp\retrieval_lab\fuzzy_multi_test60_native.json | ConvertFrom-Json; $j.summary | ConvertTo-Json -Depth 5`
+> - Ran `$j = Get-Content -Raw .tmp\retrieval_lab\rerank_upper_test60_native.json | ConvertFrom-Json; $j.summary | ConvertTo-Json -Depth 5`
+> - Ran `$j = Get-Content -Raw .tmp\retrieval_lab\paraphrase_test60_native.json | ConvertFrom-Json; $j.summary | ConvertTo-Json -Depth 5`
+>
+> </details>
+>
+> PowerShell 的 JSON 反序列化在这些大报告上卡住了，这本身也说明报告体量还值得纳入实验成本观测。我换成只按字段抓取关键指标，保持只读。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `rg -n "target_recall_at_1|target_recall_at_3|target_recall_at_10|stage_hit_at_3|purpose_hit_at_3|style_violation_at_3|nDCG@10|MRR@10|qrels_trust_level|low_confidence_rate|mean_top1_top2_margin" .tmp\retrieval_lab\evaluate_hybrid_test60_native.json`
+> - Ran `rg -n "target_recall_at_1|target_recall_at_3|target_recall_at_10|stage_hit_at_3|purpose_hit_at_3|style_violation_at_3|negative_leak_rate" .tmp\retrieval_lab\paraphrase_test60_native.json`
+> - Ran `rg -n "nDCG@3|nDCG@10|ERR@10|MRR@10|Recall@10|scene_level_recall_at_10|stage_level_hit_at_3|purpose_level_hit_at_3|style_violation_at_3|qrels_source|qrels_trust_level" .tmp\retrieval_lab\fuzzy_multi_test60_native.json`
+> - Ran `rg -n "baseline_nDCG@10|oracle_rerank_nDCG@10|rerank_opportunity_nDCG@10|bottleneck|llm_call_count" .tmp\retrieval_lab\rerank_upper_test60_native.json`
+>
+> </details>
+>
+> 我已经拿到当前基线：正式实验链路其实已经能跑，但下一轮不该再“盲目堆模块”，而是做一次可复现的能力周期实验：先确认 native 主链、再用 LLM 小样本提升 qrels 可信度、最后验证 rerank 是否真的值得进默认工作流。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `rg -n "record-capability-cycle|generate-capability-report|compare-rerank-upper-bound|evaluate-fuzzy-multirelevance|sample-active-qrels|merge-adjudicated-qrels|audit-qrels" src\retreieval_lab`
+> - Ran `rg -n "def .*capability|capability_cycle|qrels|rerank_upper" src\retreieval_lab\experiments src\retreieval_lab\cli.py`
+> - Ran `Get-Content -Raw src\retreieval_lab\README.md`
+>
+> </details>
+>
+> 还有一个关键现实：当前 native 命令已经够完整，下一轮实验不必先写一堆代码。更像一次“研究型验收”：用现有能力跑出可审计证据，再决定是加强 query understanding、rerank，还是 qrels 可信度。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content src\retreieval_lab\cli.py | Select-Object -Skip 470 -First 150`
+> - Ran `rg -n "llm|judge|grade_votes|confidence|adjud" src\retreieval_lab\qrels src\retreieval_lab\experiments\core.py src\retreieval_lab\llm src\retreieval_lab`
+>
+> </details>
+>
+> Plan
+>
+> # Retrieval Lab 下一轮实验计划：可信度 + Fuzzy 能力 + Rerank 上限
+>
+> ## Summary
+>
+> 本轮目标不是继续重构架构，而是用现有 native `retreieval_lab` 主链跑一次完整实验闭环，产出最终 Markdown 报告和能力周期记录。
+>
+> 当前基线：
+>
+> - 核心替代认证：`core_experiment_replacement_coverage = 1.0`，`critical_command_compat_count = 0`
+> - `evaluate_hybrid`: `target_recall@10 = 1.0`，`stage_hit@3 = 0.95`，`style_violation@3 = 0.016667`
+> - `fuzzy_multi`: `nDCG@10 = 0.565866`，`scene_recall@10 = 0.7`，`stage_hit@3 = 0.636667`
+> - `paraphrase`: `target_recall@10 = 0.979167`，`stage_hit@3 = 0.9875`
+> - `rerank_upper`: oracle 提升空间只有 `0.048466`
+> - 主要短板：`qrels_trust_level = low`、fuzzy stage/purpose 命中弱、top1/top2 margin 偏低
+>
+> ## Key Changes
+>
+> - 本轮优先做实验，不先改检索算法。
+> - 使用 `retreieval_lab` native 命令作为主链，`mocktesting` 只做对照，不修改。
+> - 用 pooled qrels + active qrels queue 找出最值得 LLM 裁判的样本。
+> - 如果现有命令没有真实 LLM 自动裁判入口，则本轮只生成 LLM 审核队列，不伪造 LLM 结果；最终报告明确标记 `llm_call_count = 0`。
+> - 评估重点从 single target recall 转向 graded relevance：`nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`。
+> - 最终报告必须判断瓶颈属于：qrels 可信度、query understanding、candidate recall、rerank、style safety，还是 fuzzy 多解标签不足。
+>
+> ## Experiment Matrix
+>
+> 执行目录统一使用 `.tmp\retrieval_lab\cycle_next`，避免覆盖 origin。
+>
+> 1. 迁移与健康检查
+>
+> ```powershell
+> python -m retreieval_lab infra audit --output .tmp\retrieval_lab\cycle_next\infra_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\infra_audit.md
+> python -m retreieval_lab migration certify --round-id cycle_next --output .tmp\retrieval_lab\cycle_next\migration_certification.json --markdown-output .tmp\retrieval_lab\cycle_next\migration_certification.md
+> ```
+>
+> 2. Native 主链基线
+>
+> ```powershell
+> python -m retreieval_lab evaluate-hybrid --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json
+> python -m retreieval_lab compare-ranking-workflows --split test --limit 60 --ranking-keys semantic_only,lexical_only,hybrid_rrf,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\retrieval_lab\cycle_next\workflow_compare.json
+> python -m retreieval_lab compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card,fake_llm --output .tmp\retrieval_lab\cycle_next\planner_compare.json
+> ```
+>
+> 3. Fuzzy / Paraphrase 重点评估
+>
+> ```powershell
+> python -m retreieval_lab validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\retrieval_lab\cycle_next\fuzzy_understanding.json
+> python -m retreieval_lab validate-paraphrase-stress --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\paraphrase_stress.json
+> python -m retreieval_lab evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json --markdown-output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.md
+> ```
+>
+> 4. Qrels 与主动裁判队列
+>
+> ```powershell
+> python -m retreieval_lab build-pooled-qrels --split test --limit 60 --qrels-output .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\pooled_qrels_report.json
+> python -m retreieval_lab qrels audit --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\qrels_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\qrels_audit.md
+> python -m retreieval_lab sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\active_qrels_queue.jsonl
+> ```
+>
+> 5. Rerank / Hard Negative 上限分析
+>
+> ```powershell
+> python -m retreieval_lab compare-rerank-upper-bound --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --rerank-depth 20 --output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json --markdown-output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.md
+> python -m retreieval_lab compare-strong-baselines --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\strong_baselines.json --markdown-output .tmp\retrieval_lab\cycle_next\strong_baselines.md
+> python -m retreieval_lab mine-hard-negatives --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\hard_negatives.json
+> python -m retreieval_lab validate-style-risk-mining --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\style_risk_mining.json
+> ```
+>
+> 6. 最终综合报告与能力周期
+>
+> ```powershell
+> python -m retreieval_lab experiment compare --reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json --output .tmp\retrieval_lab\cycle_next\experiment_comparison.json --markdown-output .tmp\retrieval_lab\cycle_next\experiment_comparison.md
+>
+> python -m retreieval_lab report eval --inputs .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\final_eval_report.md
+>
+> python -m retreieval_lab cycle record --cycle-id cycle_next --label "native baseline plus qrels audit" --reports .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\capability_cycle.json
+>
+> python -m retreieval_lab report capability --registry .tmp\capability_cycles.jsonl --output .tmp\retrieval_lab\cycle_next\capability_report.md
+> ```
+>
+> ## Evaluation Criteria
+>
+> 成功标准：
+>
+> - `mocktesting_clean = true`
+> - `critical_command_compat_count = 0`
+> - `negative_leak_rate = 0`
+> - `style_violation_at_3 <= 0.05`
+> - `paraphrase target_recall_at_10 >= 0.95`
+> - `fuzzy scene_level_recall_at_10 >= 0.70`
+> - `fuzzy stage_hit_at_3` 与 `purpose_hit_at_3` 较当前 `0.636667` 有提升，目标先看 `0.75+`
+> - `qrels_audit` 明确输出 bootstrap-only、low confidence、needs adjudication、LLM/manual coverage
+> - `rerank_upper_bound` 给出明确瓶颈判断；若 oracle 提升仍小于 `0.08`，不建议优先做重 reranker
+>
+> 最终报告结论必须包含：
+>
+> - 当前 Retrieval Lab 是否能独立指导下一轮实验
+> - 哪个 planner / ranking workflow 当前最好
+> - fuzzy 失败主要来自 query understanding、召回、排序还是 qrels 低可信
+> - 是否值得引入真实 LLM judge/rerank 小样本
+> - 下一轮最值得改的 1-3 个方向
+>
+> ## Test Plan
+>
+> ```powershell
+> git diff -- src\mocktesting
+> pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_cycle_next_focus -p no:cacheprovider
+> pytest -q --basetemp .pytest-tmp\retrieval_lab_cycle_next_full -p no:cacheprovider
+> ```
+>
+> 验收：
+>
+> - `src/mocktesting` diff 必须为空。
+> - focused 与 full tests 必须通过。
+> - 所有 JSON 报告能被后续 `report eval` 与 `cycle record` 消费。
+> - 若任何命令失败，先记录失败命令、异常、是否是 schema/CLI/数据问题，再决定是否补最小修复。
+>
+> ## Assumptions
+>
+> - 本轮不使用人工标注。
+> - LLM 默认关闭；如果没有明确可运行的 LLM 裁判命令，不冒充 LLM 结果。
+> - `.tmp` 下的新实验产物可以写入；源码只有在命令或 schema 发现真实缺口时才做最小修改。
+> - `mocktesting` 永远作为对照组，不修改。
+>
+> Plan implementation
+>
+> Status: completed
+> # Retrieval Lab 下一轮实验计划：可信度 + Fuzzy 能力 + Rerank 上限
+>
+> ## Summary
+>
+> 本轮目标不是继续重构架构，而是用现有 native `retreieval_lab` 主链跑一次完整实验闭环，产出最终 Markdown 报告和能力周期记录。
+>
+> 当前基线：
+>
+> - 核心替代认证：`core_experiment_replacement_coverage = 1.0`，`critical_command_compat_count = 0`
+> - `evaluate_hybrid`: `target_recall@10 = 1.0`，`stage_hit@3 = 0.95`，`style_violation@3 = 0.016667`
+> - `fuzzy_multi`: `nDCG@10 = 0.565866`，`scene_recall@10 = 0.7`，`stage_hit@3 = 0.636667`
+> - `paraphrase`: `target_recall@10 = 0.979167`，`stage_hit@3 = 0.9875`
+> - `rerank_upper`: oracle 提升空间只有 `0.048466`
+> - 主要短板：`qrels_trust_level = low`、fuzzy stage/purpose 命中弱、top1/top2 margin 偏低
+>
+> ## Key Changes
+>
+> - 本轮优先做实验，不先改检索算法。
+> - 使用 `retreieval_lab` native 命令作为主链，`mocktesting` 只做对照，不修改。
+> - 用 pooled qrels + active qrels queue 找出最值得 LLM 裁判的样本。
+> - 如果现有命令没有真实 LLM 自动裁判入口，则本轮只生成 LLM 审核队列，不伪造 LLM 结果；最终报告明确标记 `llm_call_count = 0`。
+> - 评估重点从 single target recall 转向 graded relevance：`nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`。
+> - 最终报告必须判断瓶颈属于：qrels 可信度、query understanding、candidate recall、rerank、style safety，还是 fuzzy 多解标签不足。
+>
+> ## Experiment Matrix
+>
+> 执行目录统一使用 `.tmp\retrieval_lab\cycle_next`，避免覆盖 origin。
+>
+> 1. 迁移与健康检查
+>
+> ```powershell
+> python -m retreieval_lab infra audit --output .tmp\retrieval_lab\cycle_next\infra_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\infra_audit.md
+> python -m retreieval_lab migration certify --round-id cycle_next --output .tmp\retrieval_lab\cycle_next\migration_certification.json --markdown-output .tmp\retrieval_lab\cycle_next\migration_certification.md
+> ```
+>
+> 2. Native 主链基线
+>
+> ```powershell
+> python -m retreieval_lab evaluate-hybrid --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json
+> python -m retreieval_lab compare-ranking-workflows --split test --limit 60 --ranking-keys semantic_only,lexical_only,hybrid_rrf,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\retrieval_lab\cycle_next\workflow_compare.json
+> python -m retreieval_lab compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card,fake_llm --output .tmp\retrieval_lab\cycle_next\planner_compare.json
+> ```
+>
+> 3. Fuzzy / Paraphrase 重点评估
+>
+> ```powershell
+> python -m retreieval_lab validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\retrieval_lab\cycle_next\fuzzy_understanding.json
+> python -m retreieval_lab validate-paraphrase-stress --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\paraphrase_stress.json
+> python -m retreieval_lab evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json --markdown-output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.md
+> ```
+>
+> 4. Qrels 与主动裁判队列
+>
+> ```powershell
+> python -m retreieval_lab build-pooled-qrels --split test --limit 60 --qrels-output .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\pooled_qrels_report.json
+> python -m retreieval_lab qrels audit --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\qrels_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\qrels_audit.md
+> python -m retreieval_lab sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\active_qrels_queue.jsonl
+> ```
+>
+> 5. Rerank / Hard Negative 上限分析
+>
+> ```powershell
+> python -m retreieval_lab compare-rerank-upper-bound --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --rerank-depth 20 --output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json --markdown-output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.md
+> python -m retreieval_lab compare-strong-baselines --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\strong_baselines.json --markdown-output .tmp\retrieval_lab\cycle_next\strong_baselines.md
+> python -m retreieval_lab mine-hard-negatives --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\hard_negatives.json
+> python -m retreieval_lab validate-style-risk-mining --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\style_risk_mining.json
+> ```
+>
+> 6. 最终综合报告与能力周期
+>
+> ```powershell
+> python -m retreieval_lab experiment compare --reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json --output .tmp\retrieval_lab\cycle_next\experiment_comparison.json --markdown-output .tmp\retrieval_lab\cycle_next\experiment_comparison.md
+>
+> python -m retreieval_lab report eval --inputs .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\final_eval_report.md
+>
+> python -m retreieval_lab cycle record --cycle-id cycle_next --label "native baseline plus qrels audit" --reports .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\capability_cycle.json
+>
+> python -m retreieval_lab report capability --registry .tmp\capability_cycles.jsonl --output .tmp\retrieval_lab\cycle_next\capability_report.md
+> ```
+>
+> ## Evaluation Criteria
+>
+> 成功标准：
+>
+> - `mocktesting_clean = true`
+> - `critical_command_compat_count = 0`
+> - `negative_leak_rate = 0`
+> - `style_violation_at_3 <= 0.05`
+> - `paraphrase target_recall_at_10 >= 0.95`
+> - `fuzzy scene_level_recall_at_10 >= 0.70`
+> - `fuzzy stage_hit_at_3` 与 `purpose_hit_at_3` 较当前 `0.636667` 有提升，目标先看 `0.75+`
+> - `qrels_audit` 明确输出 bootstrap-only、low confidence、needs adjudication、LLM/manual coverage
+> - `rerank_upper_bound` 给出明确瓶颈判断；若 oracle 提升仍小于 `0.08`，不建议优先做重 reranker
+>
+> 最终报告结论必须包含：
+>
+> - 当前 Retrieval Lab 是否能独立指导下一轮实验
+> - 哪个 planner / ranking workflow 当前最好
+> - fuzzy 失败主要来自 query understanding、召回、排序还是 qrels 低可信
+> - 是否值得引入真实 LLM judge/rerank 小样本
+> - 下一轮最值得改的 1-3 个方向
+>
+> ## Test Plan
+>
+> ```powershell
+> git diff -- src\mocktesting
+> pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_cycle_next_focus -p no:cacheprovider
+> pytest -q --basetemp .pytest-tmp\retrieval_lab_cycle_next_full -p no:cacheprovider
+> ```
+>
+> 验收：
+>
+> - `src/mocktesting` diff 必须为空。
+> - focused 与 full tests 必须通过。
+> - 所有 JSON 报告能被后续 `report eval` 与 `cycle record` 消费。
+> - 若任何命令失败，先记录失败命令、异常、是否是 schema/CLI/数据问题，再决定是否补最小修复。
+>
+> ## Assumptions
+>
+> - 本轮不使用人工标注。
+> - LLM 默认关闭；如果没有明确可运行的 LLM 裁判命令，不冒充 LLM 结果。
+> - `.tmp` 下的新实验产物可以写入；源码只有在命令或 schema 发现真实缺口时才做最小修改。
+> - `mocktesting` 永远作为对照组，不修改。
+</details>
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Retrieval Lab 下一轮实验计划：可信度 + Fuzzy 能力 + Rerank 上限
+>
+> ## Summary
+>
+> 本轮目标不是继续重构架构，而是用现有 native `retreieval_lab` 主链跑一次完整实验闭环，产出最终 Markdown 报告和能力周期记录。
+>
+> 当前基线：
+>
+> - 核心替代认证：`core_experiment_replacement_coverage = 1.0`，`critical_command_compat_count = 0`
+> - `evaluate_hybrid`: `target_recall@10 = 1.0`，`stage_hit@3 = 0.95`，`style_violation@3 = 0.016667`
+> - `fuzzy_multi`: `nDCG@10 = 0.565866`，`scene_recall@10 = 0.7`，`stage_hit@3 = 0.636667`
+> - `paraphrase`: `target_recall@10 = 0.979167`，`stage_hit@3 = 0.9875`
+> - `rerank_upper`: oracle 提升空间只有 `0.048466`
+> - 主要短板：`qrels_trust_level = low`、fuzzy stage/purpose 命中弱、top1/top2 margin 偏低
+>
+> ## Key Changes
+>
+> - 本轮优先做实验，不先改检索算法。
+> - 使用 `retreieval_lab` native 命令作为主链，`mocktesting` 只做对照，不修改。
+> - 用 pooled qrels + active qrels queue 找出最值得 LLM 裁判的样本。
+> - 如果现有命令没有真实 LLM 自动裁判入口，则本轮只生成 LLM 审核队列，不伪造 LLM 结果；最终报告明确标记 `llm_call_count = 0`。
+> - 评估重点从 single target recall 转向 graded relevance：`nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`。
+> - 最终报告必须判断瓶颈属于：qrels 可信度、query understanding、candidate recall、rerank、style safety，还是 fuzzy 多解标签不足。
+>
+> ## Experiment Matrix
+>
+> 执行目录统一使用 `.tmp\retrieval_lab\cycle_next`，避免覆盖 origin。
+>
+> 1. 迁移与健康检查
+>
+> ```powershell
+> python -m retreieval_lab infra audit --output .tmp\retrieval_lab\cycle_next\infra_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\infra_audit.md
+> python -m retreieval_lab migration certify --round-id cycle_next --output .tmp\retrieval_lab\cycle_next\migration_certification.json --markdown-output .tmp\retrieval_lab\cycle_next\migration_certification.md
+> ```
+>
+> 2. Native 主链基线
+>
+> ```powershell
+> python -m retreieval_lab evaluate-hybrid --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json
+> python -m retreieval_lab compare-ranking-workflows --split test --limit 60 --ranking-keys semantic_only,lexical_only,hybrid_rrf,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\retrieval_lab\cycle_next\workflow_compare.json
+> python -m retreieval_lab compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card,fake_llm --output .tmp\retrieval_lab\cycle_next\planner_compare.json
+> ```
+>
+> 3. Fuzzy / Paraphrase 重点评估
+>
+> ```powershell
+> python -m retreieval_lab validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\retrieval_lab\cycle_next\fuzzy_understanding.json
+> python -m retreieval_lab validate-paraphrase-stress --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\paraphrase_stress.json
+> python -m retreieval_lab evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json --markdown-output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.md
+> ```
+>
+> 4. Qrels 与主动裁判队列
+>
+> ```powershell
+> python -m retreieval_lab build-pooled-qrels --split test --limit 60 --qrels-output .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\pooled_qrels_report.json
+> python -m retreieval_lab qrels audit --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\qrels_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\qrels_audit.md
+> python -m retreieval_lab sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\active_qrels_queue.jsonl
+> ```
+>
+> 5. Rerank / Hard Negative 上限分析
+>
+> ```powershell
+> python -m retreieval_lab compare-rerank-upper-bound --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --rerank-depth 20 --output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json --markdown-output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.md
+> python -m retreieval_lab compare-strong-baselines --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\strong_baselines.json --markdown-output .tmp\retrieval_lab\cycle_next\strong_baselines.md
+> python -m retreieval_lab mine-hard-negatives --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\hard_negatives.json
+> python -m retreieval_lab validate-style-risk-mining --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\style_risk_mining.json
+> ```
+>
+> 6. 最终综合报告与能力周期
+>
+> ```powershell
+> python -m retreieval_lab experiment compare --reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json --output .tmp\retrieval_lab\cycle_next\experiment_comparison.json --markdown-output .tmp\retrieval_lab\cycle_next\experiment_comparison.md
+>
+> python -m retreieval_lab report eval --inputs .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\final_eval_report.md
+>
+> python -m retreieval_lab cycle record --cycle-id cycle_next --label "native baseline plus qrels audit" --reports .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\capability_cycle.json
+>
+> python -m retreieval_lab report capability --registry .tmp\capability_cycles.jsonl --output .tmp\retrieval_lab\cycle_next\capability_report.md
+> ```
+>
+> ## Evaluation Criteria
+>
+> 成功标准：
+>
+> - `mocktesting_clean = true`
+> - `critical_command_compat_count = 0`
+> - `negative_leak_rate = 0`
+> - `style_violation_at_3 <= 0.05`
+> - `paraphrase target_recall_at_10 >= 0.95`
+> - `fuzzy scene_level_recall_at_10 >= 0.70`
+> - `fuzzy stage_hit_at_3` 与 `purpose_hit_at_3` 较当前 `0.636667` 有提升，目标先看 `0.75+`
+> - `qrels_audit` 明确输出 bootstrap-only、low confidence、needs adjudication、LLM/manual coverage
+> - `rerank_upper_bound` 给出明确瓶颈判断；若 oracle 提升仍小于 `0.08`，不建议优先做重 reranker
+>
+> 最终报告结论必须包含：
+>
+> - 当前 Retrieval Lab 是否能独立指导下一轮实验
+> - 哪个 planner / ranking workflow 当前最好
+> - fuzzy 失败主要来自 query understanding、召回、排序还是 qrels 低可信
+> - 是否值得引入真实 LLM judge/rerank 小样本
+> - 下一轮最值得改的 1-3 个方向
+>
+> ## Test Plan
+>
+> ```powershell
+> git diff -- src\mocktesting
+> pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_cycle_next_focus -p no:cacheprovider
+> pytest -q --basetemp .pytest-tmp\retrieval_lab_cycle_next_full -p no:cacheprovider
+> ```
+>
+> 验收：
+>
+> - `src/mocktesting` diff 必须为空。
+> - focused 与 full tests 必须通过。
+> - 所有 JSON 报告能被后续 `report eval` 与 `cycle record` 消费。
+> - 若任何命令失败，先记录失败命令、异常、是否是 schema/CLI/数据问题，再决定是否补最小修复。
+>
+> ## Assumptions
+>
+> - 本轮不使用人工标注。
+> - LLM 默认关闭；如果没有明确可运行的 LLM 裁判命令，不冒充 LLM 结果。
+> - `.tmp` 下的新实验产物可以写入；源码只有在命令或 schema 发现真实缺口时才做最小修改。
+> - `mocktesting` 永远作为对照组，不修改。
+
+<details><summary>41 previous messages</summary>
+
+> 我会按你给的矩阵直接跑一轮完整实验，先不动源码；如果某个 native 命令在报告消费或 schema 上暴露缺口，再做最小修复。第一步我会确认 `mocktesting` 干净，然后建本轮输出目录并跑健康检查。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `New-Item -ItemType Directory -Force .tmp\retrieval_lab\cycle_next | Out-Null; Get-Item .tmp\retrieval_lab\cycle_next | Select-Object -ExpandProperty FullName`
+> - Ran `git status --short`
+>
+> </details>
+>
+> `src/mocktesting` 当前没有 diff，可以作为对照组。工作区里有一批既有的 `retreieval_lab` 未提交改动，我会只在这个基础上跑实验，不碰 mocktesting。
+>
+> 开始跑健康检查和认证，这一步主要确认 native 命令表、核心替代覆盖、mocktesting 清洁度都还站得住。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\cycle_next\infra_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\infra_audit.md`
+> - Ran `python -m retreieval_lab migration certify --round-id cycle_next --output .tmp\retrieval_lab\cycle_next\migration_certification.json --markdown-output .tmp\retrieval_lab\cycle_next\migration_certification.md`
+>
+> </details>
+>
+> 健康检查通过：核心实验替代覆盖仍是 `1.0`，critical compat 是 `0`，剩余 compat 只是两个低优先历史命令。现在跑 native 主链基线，看看这一轮与 origin 是否稳定。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `python -m retreieval_lab evaluate-hybrid --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json`
+> - Ran `python -m retreieval_lab compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card,fake_llm --output .tmp\retrieval_lab\cycle_next\planner_compare.json`
+> - Ran `python -m retreieval_lab compare-ranking-workflows --split test --limit 60 --ranking-keys semantic_only,lexical_only,hybrid_rrf,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\retrieval_lab\cycle_next\workflow_compare.json`
+>
+> </details>
+>
+> 主链结果稳定，但有个有意思的信号：`evaluate-hybrid` 很强，`compare-ranking-workflows` 的整体均值被弱 workflow 拉低；最佳 workflow 仍是 `adaptive_signature`。planner 对比里 `rule` 暂时最好，且负向泄漏为 0。下面跑 fuzzy/paraphrase，这才是本轮最重要的压力面。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `python -m retreieval_lab validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\retrieval_lab\cycle_next\fuzzy_understanding.json`
+> - Ran `python -m retreieval_lab validate-paraphrase-stress --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\paraphrase_stress.json`
+> - Ran `python -m retreieval_lab evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json --markdown-output .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.md`
+>
+> </details>
+>
+> Fuzzy 结果没有恶化但也没有提升：`scene@10=0.70` 达线，`stage/purpose@3=0.636667` 仍是短板；paraphrase 很稳，`target@10=0.979167`。现在进入 qrels 段，看看低可信到底来自哪里。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab build-pooled-qrels --split test --limit 60 --qrels-output .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\pooled_qrels_report.json`
+>
+> </details>
+>
+> Pooled qrels 本身不算“低质量”：平均置信度 `0.8737`、冲突为 0；但全部是 bootstrap-only，LLM/manual 覆盖为 0，所以 trust level 被正确压成 low。接下来跑审计和主动裁判队列。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab qrels audit --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\qrels_audit.json --markdown-output .tmp\retrieval_lab\cycle_next\qrels_audit.md`
+> - Ran `python -m retreieval_lab sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\active_qrels_queue.jsonl`
+>
+> </details>
+>
+> 主动队列抽到 80 条，其中 33 条同时是低置信/需裁决，另有 top3 与 style-risk 候选。这正好是 LLM judge 小样本最该看的集合；本轮不伪造裁判，先把队列交给报告。下面跑 rerank 上限、strong baseline、hard negatives 和 style mining。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `python -m retreieval_lab compare-rerank-upper-bound --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --rerank-depth 20 --output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json --markdown-output .tmp\retrieval_lab\cycle_next\rerank_upper_bound.md`
+> - Ran `python -m retreieval_lab compare-strong-baselines --split test --limit 60 --qrels .tmp\retrieval_lab\cycle_next\pooled_qrels.jsonl --output .tmp\retrieval_lab\cycle_next\strong_baselines.json --markdown-output .tmp\retrieval_lab\cycle_next\strong_baselines.md`
+> - Ran `python -m retreieval_lab validate-style-risk-mining --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\style_risk_mining.json`
+> - Ran `python -m retreieval_lab mine-hard-negatives --split test --limit 60 --output .tmp\retrieval_lab\cycle_next\hard_negatives.json`
+>
+> </details>
+>
+> Rerank 上限很清楚：oracle 只把 `nDCG@10` 从 `0.9487` 推到 `0.9946`，机会约 `0.046`，所以重 reranker 不是当前最大杠杆。真正刺眼的是 style-risk mining：style negative violation@3 是 `0.116667`，这比普通查询的 style violation 更能暴露软负例问题。
+>
+> 现在开始收口报告，把 qrels、fuzzy、paraphrase、rerank、hard negatives 汇成一份实验对比，再写最终 Markdown 和能力周期记录。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `python -m retreieval_lab experiment compare --reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json --output .tmp\retrieval_lab\cycle_next\experiment_comparison.json --markdown-output .tmp\retrieval_lab\cycle_next\experiment_comparison.md`
+> - Ran `python -m retreieval_lab report eval --inputs .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\final_eval_report.md`
+> - Ran `python -m retreieval_lab cycle record --cycle-id cycle_next --label "native baseline plus qrels audit" --reports .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\capability_cycle.json`
+>
+> </details>
+>
+> 综合报告和能力周期已经生成。能力分数这次是 `75.048`，系统判断“qrels trust”还是第一优先；相对 origin，style safety 和 qrels trust 有改善，但 fuzzy/retrieval quality 有回落信号，需要在报告里解释为评测口径与 qrels 信任度的影响。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab report capability --registry .tmp\capability_cycles.jsonl --output .tmp\retrieval_lab\cycle_next\capability_report.md`
+>
+> </details>
+>
+> 我再补一份带 parity 报告路径的最终认证，然后跑测试。测试会用 workspace 内的 basetemp，避免系统临时目录权限问题。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `python -m retreieval_lab migration certify --round-id cycle_next_final --parity-reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json --output .tmp\retrieval_lab\cycle_next\migration_certification_final.json --markdown-output .tmp\retrieval_lab\cycle_next\migration_certification_final.md`
+>
+> </details>
+>
+> 最终认证也通过了，带上 5 份 parity/实验报告后仍是 certified。现在跑 focused tests，再跑 full tests；如果这里失败，我会先分辨是实验产物、临时目录还是代码问题。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_cycle_next_focus -p no:cacheprovider`
+>
+> </details>
+>
+> Focused tests 通过，`56 passed`。现在跑全量测试，这一步会稍久一点，但它是确认实验平台没有把别的链路碰歪的关键检查。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q --basetemp .pytest-tmp\retrieval_lab_cycle_next_full -p no:cacheprovider`
+>
+> </details>
+>
+> 全量测试也过了，`192 passed`。我再抽取最终报告里的关键段落和本轮 JSON 指标，确保最后给你的结论是基于报告而不是凭记忆。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content .tmp\retrieval_lab\cycle_next\final_eval_report.md | Select-Object -First 220`
+> - Ran `rg -n "qrels_count|manual_count|llm_count|bootstrap_only_count|needs_adjudication_count|qrels_trust_level|style_negative_violation_at_3|hard_negative_count|rerank_opportunity_nDCG@10|bottleneck|stage_level_hit_at_3|purpose_level_hit_at_3|scene_level_recall_at_10|target_recall_at_10|negative_leak_rate" .tmp\retrieval_lab\cycle_next\*.json`
+> - Ran `Get-Content .tmp\retrieval_lab\cycle_next\capability_report.md | Select-Object -First 220`
+>
+> </details>
+>
+> 我发现自动综合报告没有把 `style_risk_mining` 纳入表格，而这份报告对软风格负例很关键。我会把它补进最终汇总报告里，避免最后结论遗漏这一块。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab experiment compare --reports .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\style_risk_mining.json --output .tmp\retrieval_lab\cycle_next\experiment_comparison.json --markdown-output .tmp\retrieval_lab\cycle_next\experiment_comparison.md`
+>
+> </details>
+>
+> 已把 style-risk 加进实验对比。接着重新生成最终 Markdown，让同一份报告同时覆盖 qrels、fuzzy、paraphrase、rerank、hard negatives 和 style-risk。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab report eval --inputs .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\evaluate_hybrid.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\paraphrase_stress.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\hard_negatives.json .tmp\retrieval_lab\cycle_next\style_risk_mining.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\final_eval_report.md`
+> - Ran `python -m retreieval_lab cycle record --cycle-id cycle_next --label "native baseline plus qrels audit" --reports .tmp\retrieval_lab\cycle_next\qrels_audit.json .tmp\retrieval_lab\cycle_next\fuzzy_multirelevance.json .tmp\retrieval_lab\cycle_next\rerank_upper_bound.json .tmp\retrieval_lab\cycle_next\experiment_comparison.json --output .tmp\retrieval_lab\cycle_next\capability_cycle.json`
+>
+> </details>
+>
+> 我刚才为了补 style-risk 重新 record 了一次相同 `cycle_id`，这会让 capability registry 出现重复 cycle。这个只是 `.tmp` 实验记录，不是源码；我会先清理重复记录，再保留一条正确的 `cycle_next`，避免趋势图被污染。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content .tmp\capability_cycles.jsonl | Select-Object -Last 5`
+>
+> </details>
+>
+> 确认 registry 里确实有两条 `cycle_next`；我会保留第一条，也就是 `previous_cycle_id=origin` 的那条，删除重复追加的那条，然后重生成 capability report。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `$registry = '.tmp\capability_cycles.jsonl'; $lines = Get-Content -LiteralPath $registry; $seen = @{}; $kept = New-Object System.Collections.Generic.List[string]; foreach ($line in $lines) { if ([string]::IsNullOrWhiteSpace($line)) { continue }; $obj = $line | ConvertFrom-Json; $cycleId = [string]$obj.cycle_id; if (-not $seen.ContainsKey($cycleId)) { $seen[$cycleId] = $true; $kept.Add($line) } }; Set-Content -LiteralPath $registry -Value $kept -Encoding UTF8; Get-Content -LiteralPath $registry | Select-Object -Last 3`
+>
+> </details>
+>
+> 重复记录已经清掉了，registry 只剩 origin 和本轮 cycle。现在重建 capability report，图表和 delta 会回到“cycle_next vs origin”的正确语义。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab report capability --registry .tmp\capability_cycles.jsonl --output .tmp\retrieval_lab\cycle_next\capability_report.md`
+>
+> </details>
+>
+> 最后我再做一次对照组检查和关键指标抽样，确保最终结论里的数字都来自当前 `cycle_next` 产物。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `Get-Content .tmp\retrieval_lab\cycle_next\capability_report.md | Select-Object -First 80`
+> - Ran `Select-String -Path .tmp\retrieval_lab\cycle_next\*.json -Pattern 'target_recall_at_10|stage_hit_at_3|purpose_hit_at_3|scene_level_recall_at_10|stage_level_hit_at_3|purpose_level_hit_at_3|style_violation_at_3|negative_leak_rate|qrels_trust_level|bootstrap_only_count|needs_adjudication_count|llm_count|manual_count|rerank_opportunity_nDCG@10|bottleneck|style_negative_violation_at_3|hard_negative_count'`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [x] 确认 mocktesting 对照组无变更并准备 cycle_next 输出目录
+> - [x] 运行 Retrieval Lab 健康检查与 native 主链基线
+> - [x] 运行 fuzzy/paraphrase/qrels/rerank/hard-negative 实验矩阵
+> - [x] 生成综合报告、能力周期和迁移认证
+> - [x] 运行 focused/full tests 并汇总最终结论
+>
+> </details>
+</details>
+
+已按计划跑完整轮实验闭环，并生成最终报告。本轮没有改 `src/mocktesting`，对照组 diff 为空；主要产物都在 [cycle_next 目录](</D:/WorkSpace/Codex/SceneWeaver/.tmp/retrieval_lab/cycle_next>)。
+
+关键报告：
+
+- [最终评估报告](</D:/WorkSpace/Codex/SceneWeaver/.tmp/retrieval_lab/cycle_next/final_eval_report.md>)
+- [能力周期报告](</D:/WorkSpace/Codex/SceneWeaver/.tmp/retrieval_lab/cycle_next/capability_report.md>)
+- [最终迁移认证](</D:/WorkSpace/Codex/SceneWeaver/.tmp/retrieval_lab/cycle_next/migration_certification_final.md>)
+- [主动 LLM 裁判队列](</D:/WorkSpace/Codex/SceneWeaver/.tmp/retrieval_lab/cycle_next/active_qrels_queue.jsonl>)
+
+**实验结论**
+
+Retrieval Lab 现在已经可以独立指导下一轮实验：核心替代认证通过，`core_experiment_replacement_coverage = 1.0`，`critical_command_compat_count = 0`，`mocktesting_clean = true`。
+
+主链质量很稳：
+
+| 项目 | 结果 |
+|---|---:|
+| `evaluate_hybrid target_recall@10` | `1.0` |
+| `evaluate_hybrid stage_hit@3` | `0.95` |
+| `evaluate_hybrid purpose_hit@3` | `0.95` |
+| `evaluate_hybrid style_violation@3` | `0.016667` |
+| `evaluate_hybrid nDCG@10` | `0.939825` |
+| 最佳 workflow | `adaptive_signature` |
+| 最佳 planner | `rule` |
+| `negative_leak_rate` | `0.0` |
+
+弱点仍然集中在 fuzzy：
+
+| 项目 | 结果 |
+|---|---:|
+| `fuzzy nDCG@10` | `0.565866` |
+| `fuzzy scene_recall@10` | `0.70` |
+| `fuzzy stage_hit@3` | `0.636667` |
+| `fuzzy purpose_hit@3` | `0.636667` |
+| `fuzzy style_violation@3` | `0.0` |
+
+这说明它能把具体 scene 放进 top10，但 fuzzy query 的前 3 位排序仍不够懂“阶段/用途”。paraphrase 反而很强：`target_recall@10 = 0.979167`，`stage_hit@3 = 0.9875`，所以自然语言改写不是当前最大问题。
+
+**qrels 与 rerank 判断**
+
+qrels 审计结果很明确：`qrels_count = 634`，`bootstrap_only_count = 634`，`llm_count = 0`，`manual_count = 0`，`needs_adjudication_count = 33`，所以 `qrels_trust_level` 仍是 `low`。我生成了 80 条主动裁判队列，下一轮最值得用 LLM judge 处理这批，而不是全量烧 token。
+
+Rerank 上限不高：baseline `nDCG@10 = 0.948691`，oracle rerank `nDCG@10 = 0.99461`，机会只有 `0.045919`，瓶颈判断是 `qrels_or_minor_ranking`。所以暂时不建议重投入通用 LLM reranker；更该先补 LLM qrels 裁判和 fuzzy understanding。
+
+还有一个单独风险：`style_negative_violation@3 = 0.116667`，高于理想的 `<= 0.05`。软风格负例仍需加强。
+
+**能力周期**
+
+能力报告记录了本轮 `cycle_next`：
+
+- overall score: `75.048`
+- `qrels_trust`: `+7.994`
+- `style_safety`: `+6.667`
+- `fuzzy_understanding`: `-15.863`
+- `retrieval_quality`: `-7.098`
+
+这里的 rerank opportunity 降低不是坏事，表示 oracle rerank 能榨出的额外空间变小，重 rerank 的优先级下降。
+
+**验证**
+
+- focused tests: `56 passed`
+- full tests: `192 passed, 1633 warnings`
+- `src/mocktesting` diff: empty
+
+下一步我建议只做三件事：先用 LLM 裁判 `active_qrels_queue.jsonl` 里的 80 条，把 qrels trust 从 low 拉到 medium；然后针对 fuzzy 的 `implicit_stage / underspecified_tone` 做 query understanding 实验；最后单独优化 style-risk penalty，把 `style_negative_violation@3` 从 `0.116667` 压到 `0.05` 以下。
