@@ -7985,9 +7985,7 @@ pytest -q --basetemp .pytest-tmp\retreieval-lab-full-infra-audit -p no:cacheprov
 > </details>
 </details>
 
-> 你认为是否全部在mocktesting的infra都遵循了‘腾笼换鸟’原则迁入了retrieve_lab?如果不是请列举展示出来
-
-<details><summary>7 previous messages</summary>
+<details><summary>4 previous messages</summary>
 
 > Context compaction
 >
@@ -7996,36 +7994,9 @@ pytest -q --basetemp .pytest-tmp\retreieval-lab-full-infra-audit -p no:cacheprov
 >
 > 我先对当前工作区做一次“盘点”，重点看 `src/mocktesting` 的 CLI/infra 能力和 `src/retreieval_lab` 已经原生化了哪些边界；这样回答不会只凭上一轮印象。
 >
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-ChildItem -Path src\mocktesting -Force`
-> - Ran `Get-ChildItem -Path src\retreieval_lab -Force`
-> - Ran `rg -n "subparsers\.add_parser|add_parser\(" src\mocktesting\mock_retriever.py src\retreieval_lab`
-> - Ran `git status --short`
->
-> </details>
->
 > 现在看起来新包已经不是空壳了，但我还要把“原生迁移、兼容桥接、未迁移”分开数清楚。尤其是 `retreieval_lab` 里有些目录存在，但可能只是边界占位，这个和“真正换鸟”差别很大。
 >
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content -Path src\retreieval_lab\compat.py`
-> - Ran `Get-Content -Path src\retreieval_lab\experiments\coverage.py`
-> - Ran `Get-Content -Path src\retreieval_lab\architecture.py`
-> - Ran `Get-Content -Path src\retreieval_lab\cli.py`
->
-> </details>
->
 > 已有的 audit 规则会把 mocktesting 命令分成 `native / partial / compat_only`，我会直接跑一次当前版本的覆盖审计，再用代码结构做人工解释。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_current.json --markdown-output .tmp\retrieval_lab\infra_audit_current.md`
-> - Ran `python -c "import json; p='.tmp/retrieval_lab/infra_audit_current.json'; d=json.load(open(p,encoding='utf-8')); print('NATIVE'); print('\n'.join(r['command'] for r in d['command_coverage'] if r['status']=='native')); print('PARTIAL'); print('\n'.join(r['command']+': '+r['note'] for r in d['command_coverage'] if r['status']=='partial')); print('COMPAT'); print('\n'.join(r['command'] for r in d['command_coverage'] if r['status']=='compat_only')); print('LAYERS'); print('\n'.join(r['layer']+': '+r['status']+' '+str(r['python_file_count']) for r in d['layer_coverage']))"`
-> - Ran `rg --files src\retreieval_lab`
-> - Ran `rg -n "def .*command|class |dataclass|def .*manifest|def .*metrics|def .*qrels|def .*rerank|def .*failure" src\retreieval_lab`
->
-> </details>
 </details>
 
 不是，**还没有全部按“腾笼换鸟”原则迁入**。目前更准确的状态是：`retreieval_lab` 已经有了新的实验平台骨架和一批原生 infra，但 mocktesting 里很多“会真正跑检索/理解/排序实验”的能力仍然是通过兼容桥调用旧 monolith。
@@ -8127,16 +8098,9 @@ sample-active-qrels
 
 > 对了，我饿mocktesting应该啥也没改变吧？这是作为对照的
 
-<details><summary>2 previous messages</summary>
+<details><summary>1 previous message</summary>
 
 > 对，这个要确认得很硬一点。我现在直接看 `git diff -- src/mocktesting` 和状态，确保它还是对照组，没有被我们动到。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `git diff -- src\mocktesting`
-> - Ran `git status --short`
->
-> </details>
 </details>
 
 确认过了：`src/mocktesting` 没有任何 git diff，保持未修改。
@@ -8151,25 +8115,11 @@ sample-active-qrels
 
 > 那是否真的腾笼换鸟了？也就是说真的保证了复制过来的逻辑是经过评估分析与重构流程的
 
-<details><summary>4 previous messages</summary>
+<details><summary>2 previous messages</summary>
 
 > 我会再做一个更像“迁移质量审计”的小检查：看新包里哪些地方还依赖 `mocktesting`，哪些是原生模块，以及是否存在大段照搬的迹象。这样回答会更实在。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg -n "mocktesting|mock_retriever|query_planner|constraint_layer|eval_methods|embedding_text_builder" src\retreieval_lab tests\test_retreieval_lab_cli.py`
-> - Ran `Get-ChildItem -Path src\retreieval_lab -Recurse -Filter *.py | Select-Object FullName,Length | Sort-Object Length -Descending | Select-Object -First 20`
-> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_tenglong_check.json`
->
-> </details>
->
 > 为了不空口说“经过评估”，我再跑一下 `retreieval_lab` 的 focused 测试。它里面有不少和旧 `mocktesting` 结果做 parity 的用例，可以证明哪些迁移不是拍脑袋重写。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-check -p no:cacheprovider`
->
-> </details>
 </details>
 
 不，我不会说“已经全部真正腾笼换鸟了”。更准确是：
@@ -8219,23 +8169,9 @@ sample-active-qrels
 
 > 好的，需要你构思比较完备的schema,然后在retrieve_lab中实现
 
-<details><summary>14 previous messages</summary>
+<details><summary>11 previous messages</summary>
 
 > 我把这个理解为：先给 `retreieval_lab` 补一个“实验平台级 schema 层”，重点从 planner/query understanding 开始，但设计要能承载后续 index、retrieval、run artifact、qrels、LLM。先读一下现有模块边界，然后我会落代码和测试。
->
-> <details><summary>Ran 9 commands</summary>
->
-> - Ran `Get-Content -Path src\retreieval_lab\datasets\service.py`
-> - Ran `Get-Content -Path src\retreieval_lab\artifacts\io.py`
-> - Ran `Get-Content -Path src\retreieval_lab\qrels\service.py -TotalCount 220`
-> - Ran `Get-Content -Path tests\test_retreieval_lab_cli.py -TotalCount 260`
-> - Ran `rg -n "script_stage|technology_showcase|setup|positive_style|negative_style|STYLE|STAGE|creative_purpose" src\mocktesting src\sceneweaver tests -g "*.py"`
-> - Ran `Get-Content -Path src\mocktesting\query_planner.py`
-> - Ran `Get-Content -Path src\retreieval_lab\datasets\__init__.py`
-> - Ran `Get-Content -Path src\retreieval_lab\README.md`
-> - Ran `Get-Content -Path pyproject.toml`
->
-> </details>
 >
 > 我会把 schema 做成“平台契约层”，不是 planner 的临时代码：一套 Pydantic 模型 + JSON schema catalog + CLI 校验命令；同时给 planners/indexes/retrieval/llm 放入轻量 schema 边界，先定义契约，不搬旧执行逻辑。
 >
@@ -8272,20 +8208,189 @@ sample-active-qrels
 >
 > planner 这一步只迁了“契约”和校验，不迁执行器，这是故意的：先让每种 query understanding 策略必须产出同一种可审计对象，后面再迁 rule/multi-query/HyDE 才不会混成一坨。
 >
-> <details><summary>Created 2 files, edited 1 file</summary>
+> <details><summary>Created 1 file, edited 1 file</summary>
 >
 > - Wrote `./src/retreieval_lab/indexes/schema.py` (+33 -0)
 > - Wrote `./src/retreieval_lab/indexes/__init__.py` (+14 -0)
-> - Wrote `./src/retreieval_lab/retrieval/schema.py` (+17 -0)
+>
+> </details>
+</details>
+
+> 继续
+
+<details><summary>31 previous messages</summary>
+
+> 继续。我会把剩下的 schema contract 接完：`retrieval` 与 `llm`，再把 schema catalog/validate 挂到 CLI、coverage audit、README 和测试里。
+>
+> <details><summary>Created 2 files, edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/schema.py` (+65 -0)
+> - Wrote `./src/retreieval_lab/retrieval/__init__.py` (+27 -0)
+> - Wrote `./src/retreieval_lab/llm/schema.py` (+33 -0)
+> - Wrote `./src/retreieval_lab/llm/__init__.py` (+14 -0)
 >
 > </details>
 >
-> Stream error
+> 现在四个原来空的核心层都有了最小原生 contract，不再是纯空壳。下一步把 schema 作为一等 CLI 能力挂出来。
 >
-> Reconnecting 5/5
-> unexpected status 502 Bad Gateway: Unknown error, url: http://127.0.0.1:8317/v1/responses
+> 小冲突只是因为 alias 字典末尾位置和我预想不一样，我先定位一下再补。
 >
-> System error
+> <details><summary>Edited 1 file</summary>
 >
-> unexpected status 502 Bad Gateway: Unknown error, url: http://127.0.0.1:8317/v1/responses
+> - Wrote `./src/retreieval_lab/compat.py` (+3 -0)
+>
+> </details>
+>
+> 我分块改 CLI，避免因为帮助文本细节导致补丁漂移。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+7 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+2 -0)
+>
+> </details>
+>
+> CLI 的 help/alias 已经补上；现在给三个原生命令接处理器：`schema catalog/show/validate`。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+41 -0)
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+4 -0)
+>
+> </details>
+>
+> coverage audit 也会知道 schema 是新的原生 infra 了。下一步把架构 manifest 也更新，让文档和机器审计一致。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/architecture.py` (+1 -0)
+>
+> </details>
+>
+> 我会顺手更新 README 的迁移状态，明确 schema 是“平台契约层”，避免以后误读为核心检索已经迁完。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+6 -1)
+>
+> </details>
+>
+> 先跑一个 schema catalog 烟测，尽早暴露模型/CLI 类型问题。
+>
+> 烟测通过。现在补测试：会覆盖 schema catalog、query_plan 负面词泄漏守卫、qrel JSONL 校验，以及四个新 contract facade。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+1 -0)
+>
+> </details>
+>
+> 我先把 alias 覆盖补上，保证 `schema catalog/show/validate` 是现代命令，不会落回 mocktesting。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+8 -0)
+>
+> </details>
+>
+> 架构测试也要承认 schema 是正式层，不是边缘工具。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+1 -0)
+>
+> </details>
+>
+> 因为这轮让 `planners/indexes/retrieval/llm` 从空层变成 contract 层，原来的 infra audit 测试也要从“确认空层存在”改成“确认 compat gap 仍然显式存在”。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+83 -2)
+>
+> </details>
+>
+> 测试已经补上。现在跑 focused suite；如果 schema 的 Pydantic 兼容层有问题，这里会很快冒出来。
+>
+> Focused suite 44 条过了。再跑一次 infra audit 和几个 CLI 烟测，确认新 schema 层在实际命令里也可用。
+>
+> 新 audit 显示空层降到 0，但 compat-only 命令仍然明确存在，这个状态很健康：contract cage 建好了，核心执行还没假装迁完。现在跑全量 pytest 看有没有碰到其它模块。
+>
+> 全量测试也过了：180 passed。最后我确认一下 diff 范围，特别是 `src/mocktesting` 仍然干净。
+>
+> 我注意到一个审计小毛刺：新增 native-only schema 命令后，旧的 `coverage_rate` 分母会把 native-only 也算进去，导致覆盖率反而下降。这个不符合“迁移覆盖”的语义，我顺手修正成 legacy 命令覆盖率。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+5 -1)
+>
+> </details>
+>
+> 修了审计分母后我再跑一下相关测试和 audit，保证数字回到可解释状态。
+>
+> Focused 测试过了，coverage_rate 现在是 11/35 = 0.314286，更贴近“legacy 能力迁移率”。我再跑一次全量，收尾。
+>
+> 全量还是 180 passed。最后再次确认对照组没被碰。
 </details>
+
+已经继续实现了 `retreieval_lab` 的平台级 schema contract 层，而且没有改 `src/mocktesting`，它仍然是对照组。
+
+**开发/优化**
+新增了完整 schema 基础设施：
+
+- [schemas/models.py](./src/retreieval_lab/schemas/models.py)：定义 11 个版本化契约，包括 `query_plan`、`scene_signature`、`run_row`、`qrel`、`index_manifest`、`retrieval_run_config`、`llm_judgement`、`capability_cycle`。
+- [schemas/commands.py](./src/retreieval_lab/schemas/commands.py)：新增 `schema catalog/show/validate` CLI。
+- [planners/schema.py](./src/retreieval_lab/planners/schema.py)：query understanding contract，不迁旧执行逻辑。
+- [indexes/schema.py](./src/retreieval_lab/indexes/schema.py)：index manifest contract。
+- [retrieval/schema.py](./src/retreieval_lab/retrieval/schema.py)：retrieval run config / run row contract。
+- [llm/schema.py](./src/retreieval_lab/llm/schema.py)：LLM sampled judgement contract，仍默认不调用真实 LLM。
+
+也更新了：
+
+- [cli.py](./src/retreieval_lab/cli.py)：支持 `python -m retreieval_lab schema catalog/show/validate`
+- [compat.py](./src/retreieval_lab/compat.py)：现代命令 alias
+- [architecture.py](./src/retreieval_lab/architecture.py)：新增 `schemas` 层
+- [coverage.py](./src/retreieval_lab/experiments/coverage.py)：schema 命令计入 native infra，并修正 `coverage_rate` 分母
+- [README.md](./src/retreieval_lab/README.md)：补充 schema 层说明和命令示例
+
+**实验/验证**
+新增测试在 [tests/test_retreieval_lab_cli.py](./tests/test_retreieval_lab_cli.py)，覆盖：
+
+- schema catalog 是否包含核心 contract
+- `query_plan` 是否阻止负向词进入 `positive_query`
+- `schema validate qrel` 是否能校验 JSONL
+- planner/index/retrieval/llm 四个 facade 是否是 native contract
+- infra audit 是否不再存在空层
+
+验证结果：
+
+```text
+pytest -q tests\test_retreieval_lab_cli.py
+44 passed
+
+pytest -q
+180 passed, 1633 warnings
+```
+
+**评估/分析结果**
+当前 audit 结果：
+
+```text
+legacy_command_count: 35
+native_command_count: 19
+fully_native_legacy_command_count: 7
+partially_native_legacy_command_count: 4
+compat_only_legacy_command_count: 24
+native_only_command_count: 12
+layer_count: 15
+empty_layer_count: 0
+coverage_rate: 0.314286
+```
+
+这说明：**“笼子”已经进一步成型了**。原来空的 `planners / indexes / retrieval / llm` 现在至少都有了原生 schema contract，不再是空目录。
+
+但我不会假装“鸟已经全换完”：核心执行命令，比如 `compare-query-understanding`、`compare-ranking-workflows`、`search`、`evaluate-hybrid`、`validate-paraphrase-stress` 等，仍然是 compat-only 或部分 compat。现在只是先把它们未来必须遵守的契约定下来了。
+
+**下一阶段**
+最自然的下一步是迁 `planners` 的 registry/cache/fake planner/legacy adapter。也就是先让所有 planner 输出都通过新的 `QueryPlanModel` 校验，再逐步迁 `rule / multi_query / hyde_card`，这样继续是“腾笼换鸟”，不是复制 monolith。
+
+> 好的，你来做计划方案并执行，每一轮迭代需要自检测，并与mocktesting做功能对比。每一轮做一个计划并执行，直到你认为真的重构成一个很好的状态。
