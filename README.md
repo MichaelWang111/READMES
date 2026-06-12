@@ -1808,7 +1808,7 @@ python -m mocktesting.mock_retriever generate-eval-report --input .tmp\workflow_
 - 增加 `tests/test_encoding_aliases.py`：
   - 直接 import `STAGE_ALIASES / POSITIVE_STYLE_ALIASES / NEGATIVE_STYLE_ALIASES`。
   - 断言包含 `不要、开场、铺垫、大厂味、广告感、炫技、纪录片、真实现场`。
-  - 断言不包含 ` `、`???`、常见 mojibake 片段。
+  - 断言不包含 `�`、`???`、常见 mojibake 片段。
 - 给 `build_query_plan` 加真实中文 fixture 测试，不通过 shell 传参。
 - mocktesting 和正式 retrieval 都跑同一批中文约束样例，比较解析结果。
 - 项目文档里注明 Windows CLI 如果直接传中文，建议 `PYTHONUTF8=1` / UTF-8 terminal；但测试不要依赖 shell 编码。
@@ -2710,42 +2710,7 @@ embedding cache stats in report
 
 > 我先把本地 80MB 到底是什么拆一下：它很可能不是“词元数据”，而是 JSONL 里把每条 1024 维 embedding 用十进制浮点文本展开了，文本格式会比二进制 float32 大很多。然后我会查几个真实资料源，对照业界怎么避免这种膨胀和慢。
 >
-> <details><summary>Ran 2 commands, searched web 7 times</summary>
->
-> - Ran `@'
-> import json
-> from pathlib import Path
-> p=Path('src/mocktesting/embedding_cache/qwen_text_embedding_v4_1024.jsonl')
-> lines=p.read_text(encoding='utf-8').splitlines()
-> print('size_mb', round(p.stat().st_size/1024/1024,2))
-> print('rows', len(lines))
-> row=json.loads(lines[0])
-> print('keys', row.keys())
-> print('embedding_dim', len(row['embedding']))
-> print('sample_text_chars', len(row.get('text','')))
-> print('sample_row_bytes', len(lines[0].encode('utf-8')))
-> print('embedding_json_bytes', len(json.dumps(row['embedding']).encode('utf-8')))
-> print('text_json_bytes', len(json.dumps(row.get('text',''), ensure_ascii=False).encode('utf-8')))
-> print('float32_binary_total_mb', round(len(lines)*len(row['embedding'])*4/1024/1024,2))
-> print('float16_binary_total_mb', round(len(lines)*len(row['embedding'])*2/1024/1024,2))
-> print('int8_binary_total_mb', round(len(lines)*len(row['embedding'])*1/1024/1024,2))
-> '@ | python -`
->
-> - Ran `@'
-> import json, statistics
-> from pathlib import Path
-> p=Path('src/mocktesting/embedding_cache/qwen_text_embedding_v4_1024.jsonl')
-> rows=[]
-> for line in p.read_text(encoding='utf-8').splitlines():
->     if line.strip(): rows.append(json.loads(line))
-> row_bytes=[len(json.dumps(r, ensure_ascii=False).encode('utf-8')) for r in rows[:500]]
-> emb_bytes=[len(json.dumps(r['embedding']).encode('utf-8')) for r in rows[:500]]
-> text_chars=[len(r.get('text','')) for r in rows[:500]]
-> print('avg_row_bytes_first500', round(statistics.mean(row_bytes),1))
-> print('avg_embedding_json_bytes_first500', round(statistics.mean(emb_bytes),1))
-> print('avg_text_chars_first500', round(statistics.mean(text_chars),1))
-> print('embedding_json_share', round(statistics.mean(emb_bytes)/statistics.mean(row_bytes),3))
-> '@ | python -`
+> <details><summary>Searched web 7 times</summary>
 >
 > <details><summary>Searched web 7 times</summary>
 >
@@ -2816,18 +2781,9 @@ int8:    4.11 MB
 
 > 好的，我需要你做
 
-<details><summary>141 previous messages</summary>
+<details><summary>107 previous messages</summary>
 
 > 我来做这一轮“把实验平台变得经济”的实现。优先做两个马上能降热路径的点：embedding cache 懒加载避免每次解析 94MB JSONL，以及 topK 排序少构造全量 result row；同时加 `--variant-types` / `--max-query-texts` 作为复杂度阀门。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "EmbeddingCache\(|load_cache|embed_texts|require_embedding|cache_stats|variant-types|max-query" src tests`
-> - Ran `Get-Content -Path src\mocktesting\embedding_cache\__init__.py -TotalCount 260`
-> - Ran `python -c "from pathlib import Path; s=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8'); print(s[1500:13000])"`
-> - Ran `python -c "from pathlib import Path; s=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8'); print(s[1670*1:2300])"`
->
-> </details>
 >
 > 我先改缓存层。当前最大坏味道是 `EmbeddingCache()` 一创建就完整 JSON 解析 94MB；改成 lazy 后，只加载这次命令需要的 key，避免 2 秒多的固定税。
 >
@@ -2855,17 +2811,10 @@ int8:    4.11 MB
 >
 > 我会做一组机械替换，把命令里的缓存实例化改成 helper。保持测试里直接构造 `EmbeddingCache` 的行为不变。
 >
-> <details><summary>Edited 1 file, ran 5 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
-> - Ran `rg -n "cache = EmbeddingCache\(" src\mocktesting\mock_retriever.py`
-> - Ran `python -c "from pathlib import Path; s=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8');
-> for pos in [390,430,505,585,635,720,760,830,895,985,1345,1435]: print('---',pos); print('\n'.join(s.splitlines()[pos:pos+18]))"`
 > - Wrote `./src/mocktesting/mock_retriever.py` (+8 -48)
-> - Ran `rg -n "cache = EmbeddingCache\(" src\mocktesting\mock_retriever.py`
-> - Ran `python -c "from pathlib import Path; lines=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8').splitlines();
-> for pos in [860,950,1310,1400]: print('---',pos); print('\n'.join(lines[pos:pos+25]))"`
 > - Wrote `./src/mocktesting/mock_retriever.py` (+3 -18)
-> - Ran `rg -n "cache = EmbeddingCache\(" src\mocktesting\mock_retriever.py`
 >
 > </details>
 >
@@ -2881,10 +2830,9 @@ int8:    4.11 MB
 >
 > `--max-query-texts` 已加。现在把所有 query channel 构造改成走这个参数。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+6 -6)
-> - Ran `rg -n "build_query_channels_for_plan\(|query_texts_for_plans|query_channels_for_plan_args" src\mocktesting\mock_retriever.py`
 >
 > </details>
 >
@@ -2898,12 +2846,9 @@ int8:    4.11 MB
 >
 > 我会把 `max_query_texts` 从 CLI 传进所有 fast signal 预计算点。
 >
-> <details><summary>Edited 1 file, ran 2 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+32 -4)
-> - Ran `rg -n "precompute_fast_case_signals\(" src\mocktesting\mock_retriever.py tests\test_mock_embedding_retriever.py`
-> - Ran `python -c "from pathlib import Path; lines=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8').splitlines();
-> for pos in [1028,1330]: print('---', pos); print('\n'.join(lines[pos:pos+28]))"`
 > - Wrote `./src/mocktesting/mock_retriever.py` (+1 -0)
 >
 > </details>
@@ -2944,17 +2889,6 @@ int8:    4.11 MB
 >
 > <details><summary>Edited 1 file</summary>
 >
-> - Wrote `./src/mocktesting/mock_retriever.py` (+54 -56)
->
-> </details>
->
-> Stream error
->
-> Reconnecting 1/5
-> stream disconnected before completion: stream closed before response.completed
->
-> <details><summary>Edited 1 file</summary>
->
 > - Wrote `./src/mocktesting/mock_retriever.py` (+50 -10)
 > - Wrote `./src/mocktesting/mock_retriever.py` (+21 -0)
 >
@@ -2978,10 +2912,9 @@ int8:    4.11 MB
 >
 > 现在把 `embedding_cache` 字段加进几个主要报告。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+7 -0)
-> - Ran `rg -n "embedding_cache" src\mocktesting\mock_retriever.py`
 >
 > </details>
 >
@@ -3011,13 +2944,6 @@ int8:    4.11 MB
 >
 > 核心改动都进去了。我现在跑目标测试，先抓接口和统计字段问题。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\speed-target -p no:cacheprovider`
-> - Ran `python -m py_compile src\mocktesting\embedding_cache\__init__.py src\mocktesting\query_planner.py src\mocktesting\mock_retriever.py tests\test_mock_embedding_retriever.py`
->
-> </details>
->
 > 测试发现旧的 SimpleNamespace 没有 `max_query_texts`，我会把内部访问改成 `getattr`，兼容直接函数测试和旧调用。
 >
 > <details><summary>Edited 1 file</summary>
@@ -3029,32 +2955,9 @@ int8:    4.11 MB
 >
 > 我重新跑目标测试。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\speed-target2 -p no:cacheprovider`
-> - Ran `python -m py_compile src\mocktesting\embedding_cache\__init__.py src\mocktesting\query_planner.py src\mocktesting\mock_retriever.py tests\test_mock_embedding_retriever.py`
->
-> </details>
->
 > 目标测试通过。现在做实际性能对比：先跑完整 fuzzy multi_query 热缓存，然后跑 quick 参数看看能不能接近 1 秒级。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_lazy_topk.json | Out-Host } | Select-Object TotalSeconds`
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > 完整 fuzzy 从约 6.6s 降到 4.4s，quick 版本到 2.2s。还没到一个数量级，所以我继续看 profile：剩下大头应该是约束/style 每 case 全库循环和 BM25。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -c "import json; from pathlib import Path; 
-> for path in ['.tmp/fuzzy_lazy_topk.json','.tmp/fuzzy_quick.json']:
->  d=json.loads(Path(path).read_text(encoding='utf-8')); print(path, json.dumps(d.get('embedding_cache',{}), ensure_ascii=False, indent=2))"`
-> - Ran `python -m cProfile -s cumtime -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_profile_after.json`
->
-> </details>
 >
 > 剩下的大头是每个 query 对 160 张卡做 Python 字符串约束/style 检查。我会把这些改成 PreparedMockIndex 里的预计算 mask：stage、constraint text、style alias 命中都提前准备，查询时只做数组加减。
 >
@@ -3071,13 +2974,7 @@ int8:    4.11 MB
 >
 > 我来接着把这件事做实：先收口当前半完成的加速改动，确认 80MB cache 的成因和可替代方案，再用真实资料把“别人为什么更快”这部分对齐到工程方案里。
 >
-> <details><summary>Ran 3 commands, searched web 4 times</summary>
->
-> - Ran `rg -n "class PreparedMockIndex|STYLE_ALIASES|def prepare_mock_index|def ensure_fast_constraints|def rank_fast_cases|def build_query_channels_for_plan|class EmbeddingCache|cache_report|validate_fuzzy|compare_query" src/mocktesting/mock_retriever.py src/mocktesting/query_planner.py src/mocktesting/embedding_cache/__init__.py`
->
-> - Ran `git diff -- src/mocktesting/mock_retriever.py src/mocktesting/query_planner.py src/mocktesting/embedding_cache/__init__.py tests/test_mock_embedding_retriever.py tests/test_retrieval_query_plan.py pyproject.toml`
->
-> - Ran `Get-ChildItem -Force .tmp,src/mocktesting -ErrorAction SilentlyContinue | Select-Object FullName,Length,LastWriteTime`
+> <details><summary>Searched web 4 times</summary>
 >
 > <details><summary>Searched web 4 times</summary>
 >
@@ -3092,48 +2989,13 @@ int8:    4.11 MB
 >
 > 从现有 profile 看，慢点已经不在 `generate-eval-report`，而在每个 fuzzy/paraphrase 变体重复做约束、BM25 和 cache 读取。我先把这几块改成“预编译索引 + 顶部结果再解释”，这样实验链路保留可解释性，但不会为每条 case 扫 160 张卡片一遍又一遍。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content src/mocktesting/query_planner.py | Select-Object -Skip 380 -First 110`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 1600 -First 520`
-> - Ran `Get-Content src/mocktesting/embedding_cache/__init__.py | Select-Object -First 240`
->
-> </details>
->
 > 顺手发现一个更实际的问题：`query_planner.py` 里有几段生成改写/HyDE 的中文模板确实是文件级乱码，不只是终端显示。这会污染 embedding 文本、增加无效 cache 行，也会解释为什么 `multi_query` 没带来收益甚至回退。我会一起修掉。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content src/mocktesting/query_planner.py | Select-Object -First 220`
-> - Ran `Get-Content src/mocktesting/query_planner.py | Select-Object -Skip 480 -First 180`
-> - Ran `Get-Content src/mocktesting/constraint_layer.py | Select-Object -First 220`
->
-> </details>
->
 > 这里还有一个取舍：我不会现在把正式 retrieval 收敛进来，但会借用它已经正确的 UTF-8 query/style alias，避免 mocktesting 自己的乱码解析继续制造噪声。这样仍然是实验链路优先，只是把坏掉的实验输入修正。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content src/sceneweaver/retrieval/query_plan.py | Select-Object -First 260`
-> - Ran `Get-Content src/sceneweaver/retrieval/style.py | Select-Object -First 240`
-> - Ran `rg -n "parse_query_constraints|DESIRED_PATTERNS|FORBIDDEN_PATTERNS|NEGATIVE_SPAN_RE|generate_rewrites|generate_hyde_text|estimate_ambiguity|stage_text|purpose_text|style_text" src tests`
->
-> </details>
 >
 > `rg` 能看到 Python 解析出来的源码里有正确中文，但 `Get-Content` 显示乱码，说明有些地方是 PowerShell 编码显示问题；不过我会用 Python 的 AST/运行时字符串来验证，而不是靠终端肉眼判断。刚才那几段 `query_planner.py` 在 `rg` 结果里是正常 UTF-8，所以先不做无谓替换。
 >
 > 现在重点回到性能：`PreparedMockIndex` 的 dataclass 已经加了字段，但 `prepare_mock_index()` 还没填，运行到这里会直接断。我先补齐预计算，再把 per-item 的约束/风格判断换成数组逻辑。
->
-> <details><summary>Ran 6 commands</summary>
->
-> - Ran `rg -n "def score_style_constraints_from_plan|def has_forbidden_stage_hit|def index_item_lexical_text|def summarize_fuzzy_rows|def summarize_paraphrase_rows|def compact_case_rows|rank_fast_cases\(" src/mocktesting/mock_retriever.py`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 1360 -First 180`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 2040 -First 180`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 2280 -First 160`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 3120 -First 100`
-> - Ran `Get-Content tests/test_mock_embedding_retriever.py | Select-Object -Skip 440 -First 80`
->
-> </details>
 >
 > 为了把 cache 问题也落到代码上，我打算分两层做：短期继续保留 JSONL 兼容；同时新增一个矩阵 sidecar（`.npz`，默认 float16），命令跑实验时优先读矩阵。JSONL 负责可追溯，矩阵负责速度和体积，这也是本地实验里比较接近工业系统的形态。
 >
@@ -3161,56 +3023,27 @@ int8:    4.11 MB
 >
 > 先跑一组聚焦测试，确认加速路径和现有 query plan 行为没被我改坏。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\speed-target3 -p no:cacheprovider`
->
-> </details>
->
 > 聚焦测试过了，说明这次替换没有破坏排序/约束语义。接着我跑一下同样 60 case fuzzy 命令，看看这次约束 mask 对实际耗时贡献有多少。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_masked.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 >
 > 这一步已经从之前约 4.4s 压到 3.4s 左右，属于有效但还不是数量级变化。真正的下一块是 embedding cache：现在每次还要扫/解析 JSONL，且 1024 维 float 用文本存储，体积天然会炸。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick_masked.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > 我会把矩阵 cache 做成可选但默认启用的读取路径：如果 `.npz` sidecar 存在且不比 JSONL 旧，就直接按 key 查向量；没有 sidecar 或 sidecar 过期时自动回退 JSONL，不冒险用旧缓存。这样不会破坏你现在的 cache，也能逐步迁移。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/embedding_cache/__init__.py` (+123 -4)
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -First 80`
 >
 > </details>
 >
 > 矩阵 cache 模块已经加上了，接下来把它接进 CLI：实验命令默认优先读 `.npz`，另外提供一个显式 `compact-embedding-cache` 命令把现有 JSONL 一次性转成矩阵文件。
 >
-> <details><summary>Edited 2 files, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+1 -0)
-> - Wrote `./src/mocktesting/mock_retriever.py` (+19 -13)
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 100 -First 80`
 >
 > </details>
 >
 > PowerShell 输出里的中文仍然会显示成乱码，但这只是显示层；我会继续用 patch 针对结构化位置修改，不靠这些字符串内容做判断。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 180 -First 80`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 330 -First 90`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 300 -First 40`
->
-> </details>
 >
 > 我找到了 CLI 的实际结构，下面把 `compact-embedding-cache` 插进去，并把 `make_embedding_cache()` 改成默认尝试矩阵 sidecar。
 >
@@ -3222,10 +3055,9 @@ int8:    4.11 MB
 >
 > 现在补公共参数和命令函数。默认值我设为 `--cache-format matrix`，但只有 sidecar 存在且新鲜时才会用；否则自动退回 JSONL，所以兼容性比较稳。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+14 -0)
-> - Ran `Get-Content tests/test_mock_embedding_retriever.py | Select-Object -First 35`
 >
 > </details>
 >
@@ -3239,43 +3071,13 @@ int8:    4.11 MB
 >
 > 继续跑聚焦测试，先把新 cache 路径的正确性锁住。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\matrix-target -p no:cacheprovider`
->
-> </details>
->
 > 测试通过。现在我用新命令把现有 90MB 级 JSONL 压成矩阵 sidecar，再用同一条 fuzzy 命令复测热路径。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m mocktesting.mock_retriever compact-embedding-cache --matrix-dtype float16`
->
-> </details>
 >
 > 压缩结果很直观：JSONL 是 98,632,987 bytes，float16 `.npz` 是 9,704,962 bytes，大约缩到 9.8%。这基本解释了“为什么 80MB 不合理”：不是词元多，是 float 数组被 JSON 文本放大了。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_matrix.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > 矩阵读取后，全量 fuzzy 从 3.4s 再到 2.6s 左右，指标不变。还不是你说的“再压一个数量级”，但这是在 300 variants 全量跑的情况下；我再测 quick profile 看实验迭代模式能不能进 1 秒级附近。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick_matrix.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > quick 模式现在约 1.48s。剩下的大头大概率是 Python 进程启动、读 index、构建 BM25/矩阵和 300 次排序本身；我再用 cProfile 看一眼，避免凭感觉优化。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m cProfile -s cumulative -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_profile_matrix.json`
->
-> </details>
 >
 > profile 里剩下最扎眼的是 BM25：300 个变体每个都重新按 postings 累加。这个可以再压：把“term -> 文档分数向量”懒缓存起来，重复词直接做 NumPy 向量相加；同时让矩阵 cache 直接返回 ndarray，避免每个 query vector 先转 list 再转 ndarray。
 >
@@ -3296,65 +3098,21 @@ int8:    4.11 MB
 >
 > 再跑测试，特别是 BM25 等价测试会帮我们确认 term vector cache 没改分数。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\matrix-target2 -p no:cacheprovider`
->
-> </details>
->
 > 等价测试通过。现在再测全量 fuzzy 和 quick，看 BM25 term cache + ndarray 路径的实际收益。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_matrix_bm25cache.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 >
 > 全量 300 variants 已经到 1.77s，指标仍不变。这个已经比最初的 6.6s 热路径快 3.7 倍，比一分钟级命令的痛感低很多；quick 再测一下。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick_matrix_bm25cache.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > quick 这次反而抖到 2.9s，像是 Windows/进程冷启动抖动，不像算法退化。我马上复测一次同命令，取更可信的热路径数字。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick_matrix_bm25cache2.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 >
 > 复测仍慢，说明 quick 这里不是算法本身，而可能是 cache sidecar 被判 stale、又退回 JSONL 了。我要打开报告里的 `embedding_cache` 字段确认。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -c "import json; from pathlib import Path; p=Path('.tmp/fuzzy_quick_matrix_bm25cache2.json'); data=json.loads(p.read_text(encoding='utf-8')); print(json.dumps(data.get('embedding_cache'), ensure_ascii=False, indent=2))"`
->
-> </details>
->
 > cache 确认是矩阵路径，加载只有 16ms。quick 的波动不是 JSONL 退回。我再跑一次全量作为对照，看看是不是系统当下 I/O/杀软扫描在抖。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --output .tmp\fuzzy_matrix_bm25cache2.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 >
 > 全量现在 2.25s，正常范围。quick 的 3s 是异常抖动或某段固定成本没有随变体数下降；我用 cProfile 对 quick 抓一下，不继续猜。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m cProfile -s cumulative -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --max-query-texts 2 --variant-types implicit_stage,fuzzy_style --output .tmp\fuzzy_quick_profile_matrix.json`
->
-> </details>
->
 > profile 很清楚：quick 的真实 Python 内部只有 1.64s，其中近 0.9s 是 import 固定成本，0.4s 是构建 BM25 index。想再降一位数量级，单次 CLI 很难，得做“预编译索引 sidecar”或常驻进程；我先测用户最关心的 `compare-query-understanding`，看现在是否还接近一分钟。
 >
-> <details><summary>Ran 1 command, searched web 5 times</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card --output .tmp\query_understanding_matrix_fast.json | Out-Host } | Select-Object TotalSeconds`
+> <details><summary>Searched web 5 times</summary>
 >
 > <details><summary>Searched web 5 times</summary>
 >
@@ -3370,33 +3128,9 @@ int8:    4.11 MB
 >
 > 资料这边我已经拿到几类官方信源：Faiss 的 index/memory tradeoff、Qdrant 的 quantization、Elasticsearch/Weaviate 的 hybrid/RRF、Pinecone 的 two-stage rerank、NumPy 的二进制数组存储。现在先跑全量测试，最后我把这些和本次实现结果一起归纳给你。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q --basetemp .pytest-tmp\speed-full-matrix -p no:cacheprovider`
->
-> </details>
->
 > 全量测试通过：119 passed。现在我检查一下改动清单和生成物，避免把实验输出/sidecar 混进需要提交的代码说明里。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `git status --short`
-> - Ran `Get-ChildItem src\mocktesting\embedding_cache | Select-Object Name,Length,LastWriteTime`
-> - Ran `python -c "import json; from pathlib import Path; paths=['.tmp/query_understanding_matrix_fast.json','.tmp/fuzzy_matrix_bm25cache.json','.tmp/fuzzy_quick_profile_matrix.json'];
-> for p in paths:
->  data=json.loads(Path(p).read_text(encoding='utf-8')); print(p); print(json.dumps(data.get('summary',{}), ensure_ascii=False)); print(json.dumps(data.get('embedding_cache',{}), ensure_ascii=False))"`
->
-> </details>
->
 > 状态里有一个新生成的 `.npz` sidecar 和一些 eval output。它们是实验产物；代码层面我不会把它们当作源码解释，但 `.npz` 是你后续跑实验提速要用的本地缓存。若你之后要提交代码，建议把这种 sidecar 加入 ignore。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content .gitignore -ErrorAction SilentlyContinue | Select-Object -First 200`
-> - Ran `git diff --stat`
-> - Ran `git diff -- src/mocktesting/embedding_cache/__init__.py src/mocktesting/mock_retriever.py tests/test_mock_embedding_retriever.py pyproject.toml | Select-Object -First 260`
->
-> </details>
 >
 > 我会把 `src/mocktesting/embedding_cache/*.npz` 加进 ignore，这样本地矩阵缓存可长期保留但不会误提交。JSONL 本身已经是已有文件，我不会回滚或清理它。
 >
@@ -3408,12 +3142,6 @@ int8:    4.11 MB
 >
 > ignore 已加。再看一次状态，确认 `.npz` 不再作为未跟踪源码出现。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `git status --short`
->
-> </details>
->
 > 我补一个小细节：矩阵保存耗时现在也写进报告/状态，方便以后判断 sidecar 是否值得自动重建。
 >
 > <details><summary>Edited 1 file</summary>
@@ -3424,17 +3152,9 @@ int8:    4.11 MB
 >
 > 最后再跑一次聚焦测试，确保这个报告字段调整没有副作用。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\matrix-target3 -p no:cacheprovider`
->
-> </details>
->
 > 核心改动已经验证过全量，这个小补丁也过了聚焦测试。为了最终收口，我再跑一遍全量，给你一个干净的最终数字。
 >
-> <details><summary>Ran 1 command, searched web 5 times</summary>
->
-> - Ran `pytest -q --basetemp .pytest-tmp\speed-full-matrix2 -p no:cacheprovider`
+> <details><summary>Searched web 5 times</summary>
 >
 > <details><summary>Searched web 5 times</summary>
 >
@@ -3450,13 +3170,7 @@ int8:    4.11 MB
 >
 > 资料部分和代码验证都齐了。我最后抓一下关键函数的行号，方便你回头看改动位置。
 >
-> <details><summary>Ran 3 commands, searched web 6 times</summary>
->
-> - Ran `rg -n "class EmbeddingCache|def build_matrix_cache|def save_matrix_cache|def compact_embedding_cache_command|def prepare_mock_index|class PreparedMockIndex|def ensure_fast_constraints|def score_query_fast|compact-embedding-cache|cache-format|bm25_term_vector" src/mocktesting/embedding_cache/__init__.py src/mocktesting/mock_retriever.py`
->
-> - Ran `rg -n "matrix_sidecar|prepared_bm25|fast_score|lazy_loads" tests/test_mock_embedding_retriever.py`
->
-> - Ran `rg -n "mocktesting/embedding_cache" .gitignore`
+> <details><summary>Searched web 6 times</summary>
 >
 > <details><summary>Searched web 6 times</summary>
 >
@@ -3472,21 +3186,6 @@ int8:    4.11 MB
 > </details>
 >
 > 我再用新版 `compact-embedding-cache` 生成一次 sidecar，拿到包含保存耗时的最终压缩报告。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m mocktesting.mock_retriever compact-embedding-cache --matrix-dtype float16`
->
-> </details>
->
-> <details><summary>Plan</summary>
->
-> - [x] 定位热路径与相关接口
-> - [x] 实现 embedding cache 懒加载与统计
-> - [ ] 实现 topK-only 排序与复杂度参数
-> - [ ] 补测试并跑性能/回归验证
->
-> </details>
 </details>
 
 已经做完这一轮：重点是把实验链路的“文本 JSON embedding cache + 重复排序计算”换成更接近工业做法的轻量本地形态。
@@ -3552,71 +3251,21 @@ int8:    4.11 MB
 
 > 给出目前检索的api,我看看速度怎么样
 
-<details><summary>14 previous messages</summary>
+<details><summary>7 previous messages</summary>
 
 > 我先看一下项目里正式检索服务和 mocktesting CLI 分别暴露了什么入口，然后给你可直接跑的调用方式和测速命令。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg -n "retrieve_experience_matches|FastAPI|@app\.|APIRouter|retrieval|keyword-loop|def search_command|subparsers.add_parser\(\"search\"" src tests README* pyproject.toml`
-> - Ran `rg -n "class .*Request|class .*Response|/retrieve|/retrieval|experience_matches|match" src/sceneweaver src/mocktesting`
-> - Ran `Get-ChildItem -Recurse -File src | Where-Object { $_.Name -match 'app|api|server|retrieval|service|cli' } | Select-Object FullName`
->
-> </details>
->
 > 项目里没有看到 HTTP/FastAPI 服务入口，当前“检索 API”主要是两层：正式 Python 函数/CLI，以及 mocktesting 的实验 CLI。正式链路我再打开函数签名和 CLI 参数，给你最短可测速用法。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content src\sceneweaver\retrieval\service.py | Select-Object -First 180`
-> - Ran `Get-Content src\sceneweaver\retrieval\__init__.py | Select-Object -First 80`
-> - Ran `Get-Content src\sceneweaver\cli.py | Select-Object -Skip 160 -First 140`
-> - Ran `Get-Content pyproject.toml | Select-Object -First 120`
->
-> </details>
 >
 > 正式 CLI 的 `retrieve-cards` 还不是我们这轮优化过的 mock fast path；如果你要看“当前实验检索速度”，应该测 `python -m mocktesting.mock_retriever search ...`。我给你两个入口：一个看实验 fast path，一个看正式 CLI。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever search --help`
-> - Ran `sceneweaver keyword-loop --help`
-> - Ran `sceneweaver retrieve-cards --help`
->
-> </details>
->
 > 顺便注意到正式 `sceneweaver --help` 在当前环境有 Typer/Click 版本兼容问题，help 会报 `make_metavar`，但不一定影响直接调用命令。测速我建议先用 `mocktesting.mock_retriever search`，这是这轮优化覆盖到的路径。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Get-Content src\mocktesting\mock_retriever.py | Select-Object -Skip 440 -First 90`
-> - Ran `Get-Content src\mocktesting\mock_retriever.py | Select-Object -Skip 530 -First 35`
->
-> </details>
 >
 > 我现在用一条代表性 query 跑一下 `search` 的实际耗时，顺手确认这个 API 调用能正常返回结果。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever search "不要大厂味，不要广告感，要有人味，像纪录片一样先让观众进入现场" --query-planner rule --top-k 5 --output .tmp\search_speed_rule.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
->
 > 这条新 query 在我当前 shell 环境里触发了未缓存 embedding，而这个环境没有 dashscope，所以报了依赖错误；你激活 `video_expert_analyzer` 后应该能跑。为了给你看纯检索热路径速度，我换一条已缓存评测 query 再测。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -c "import json; from pathlib import Path; data=json.loads(Path('src/mocktesting/eval_inputs/review_generated_inputs.json').read_text(encoding='utf-8')); print(data['cases'][0]['user_input'])"`
->
-> </details>
->
 > 这条是评测集中已有文本，应当命中本地 cache；我用它测一下。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever search "我需要一个开场镜头：适合用于企业片开场或问题建立阶段，用真实场景先让观众感到距离、紧迫和需要被解决的现实压力。" --query-planner rule --top-k 5 --output .tmp\search_speed_cached.json | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 </details>
 
 目前没有 HTTP API，检索入口主要是 **CLI / Python 函数 API**。你要测速度，建议先测 mocktesting 这条实验链路，因为这是最近优化过的。
@@ -3669,11 +3318,7 @@ python -m mocktesting.mock_retriever compact-embedding-cache --matrix-dtype floa
 
 > 我先打开你说的“速度评估报告”看看里面具体测了哪些命令和指标，再结合我们已有的 recall/stage/purpose 指标判断质量，不只看速度这一面。
 >
-> <details><summary>Ran 2 commands, searched web 1 time</summary>
->
-> - Ran `Get-ChildItem -LiteralPath "D:\WorkSpace\Codex\SceneWeaver" -Force | Where-Object { $_.Name -like '*速度*' -or $_.Name -like '*评估*' -or $_.Name -like '*报告*' } | Select-Object FullName,Length,LastWriteTime,Mode`
->
-> - Ran `rg -n "速度|评估|报告|recall|stage|purpose|scene|latency|TotalSeconds|elapsed|quality|准确|命中|召回" -S .`
+> <details><summary>Searched web 1 time</summary>
 >
 > <details><summary>Searched web 1 time</summary>
 >
@@ -3685,9 +3330,7 @@ python -m mocktesting.mock_retriever compact-embedding-cache --matrix-dtype floa
 >
 > 报告里已经能看到几个关键指标：速度确实很漂亮，但质量要分层看。我再把文件完整扫一下，确认有没有 top results 的具体例子和值。
 >
-> <details><summary>Ran 1 command, searched web 1 time</summary>
->
-> - Ran `Get-Content -LiteralPath "D:\WorkSpace\Codex\SceneWeaver\速度评估报告" -Encoding UTF8 | Select-Object -First 430`
+> <details><summary>Searched web 1 time</summary>
 >
 > <details><summary>Searched web 1 time</summary>
 >
@@ -3767,13 +3410,7 @@ python -m mocktesting.mock_retriever compact-embedding-cache --matrix-dtype floa
 >
 > 我会再快速盘一下 mocktesting 现在已有命令/报告形态，避免建议重复造轮子；然后把“缺口”和“新实验优先级”整理成一份可执行路线。
 >
-> <details><summary>Ran 3 commands, searched web 7 times</summary>
->
-> - Ran `python -m mocktesting.mock_retriever --help`
->
-> - Ran `Get-ChildItem src\mocktesting\eval_outputs -File | Select-Object Name,Length,LastWriteTime | Sort-Object LastWriteTime -Descending | Select-Object -First 25`
->
-> - Ran `rg -n "subparsers.add_parser|def .*_command|def markdown_report|def summarize_|def build_.*variants|def compare_" src/mocktesting/mock_retriever.py src/mocktesting/query_planner.py`
+> <details><summary>Searched web 7 times</summary>
 >
 > <details><summary>Searched web 7 times</summary>
 >
@@ -4032,178 +3669,10 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 
 > 好的，我支持你，请列出计划
 
-<details><summary>2 previous messages</summary>
+<details><summary>1 previous message</summary>
 
 > Plan
 >
-> # SceneWeaver 检索实验平台下一阶段计划
->
-> ## Summary
->
-> 目标从“继续提速”转向“让实验可信，并提升具体 scene 排序质量”。本轮不接外部向量库、不训练模型、不默认调用 LLM；继续在 `src/mocktesting` 内完善实验平台。
->
-> 第一阶段成功标准：
->
-> - fuzzy/paraphrase `scene_recall_at_10` 从当前约 `0.606` 提到 `0.70+`
-> - `stage_hit_at_3 >= 0.92`
-> - `purpose_hit_at_3 >= 0.90`
-> - `style_violation_at_3 <= 0.05`
-> - 新增 graded relevance 后报告 `nDCG@3/10`、`MRR@10`
-> - LLM 默认关闭，仅用于小样本 qrels/rerank 抽查
->
-> ## Key Changes
->
-> ### 1. 可信评测 Infra
->
-> - 新增 graded qrels 数据格式：`query_id, item_id, grade, reason, source`
->   - `grade=3`: 强相关，理想结果
->   - `grade=2`: 可用结果
->   - `grade=1`: 弱相关
->   - `grade=0`: 不相关或违反约束
-> - 新增实验注册记录：保存 `command/config/index fingerprint/cache version/git sha/latency/metrics`
-> - 新增命令：
->   - `build-graded-qrels`
->   - `evaluate-graded`
->   - `compare-experiments`
-> - 指标新增：
->   - `nDCG@3`
->   - `nDCG@10`
->   - `MRR@10`
->   - `Judged@10`
->   - 保留现有 `scene_recall/stage_hit/purpose_hit/style_violation`
->
-> ### 2. Failure Attribution
->
-> - 新增 `analyze-failures` 命令，对 miss case 自动归因：
->   - `query_understanding_failure`
->   - `candidate_recall_failure`
->   - `fusion_ranking_failure`
->   - `constraint_failure`
->   - `style_risk_miss`
->   - `ambiguous_multi_valid_answer`
->   - `weak_target_label`
-> - 每个失败样本输出：
->   - target rank
->   - target 各路分数
->   - top1 为什么赢
->   - target 是否进入 top100
->   - 是否存在多解或标签不充分
-> - Markdown 报告增加“主要失败类型”和“下一轮调参建议”。
->
-> ### 3. Scene Signature Ranking
->
-> - 新增 `scene_signature` 层，用于补足 exact scene 排序。
-> - 每张 card 和 query 都生成结构化签名：
->   - `people`
->   - `place`
->   - `action`
->   - `objects`
->   - `emotion_function`
->   - `narrative_position`
->   - `camera_experience`
->   - `script_reuse_pattern`
-> - 旧卡片用规则 fallback，从 `keywords / visual_symbols / director_strategy / narrative_logic / script_use_sentence` 推断。
-> - 新增 `signature_score`，并支持 ranking keys：
->   - `signature_only`
->   - `semantic_signature`
->   - `hybrid_rrf_constraints_signature`
->   - `adaptive_signature`
-> - 默认实验 workflow：
->   - `hybrid_rrf_constraints`
->   - `hybrid_rrf_constraints_signature`
->   - `adaptive_signature`
->
-> ### 4. Style Risk Mining
->
-> - 扩展风格风险画像，重点覆盖软性负例：
->   - `big_company_office`
->   - `ad_like`
->   - `corporate_report_tone`
->   - `slogan_driven`
->   - `product_pitch`
->   - `tech_coldness`
->   - `fortune_500_polish`
->   - `generic_brand_film`
-> - 新增命令：
->   - `validate-style-risk-mining`
->   - `mine-hard-negatives`
-> - 自动把 style false positive 追加到 hard negative pool，作为下一轮回归集。
-> - “世界500强品牌质感 / 汇报片 / 宣传片腔 / 口号感 / 产品卖点堆叠”默认进入风格风险词表。
->
-> ### 5. Gated Rerank 实验
->
-> - 不全量 rerank，只在高风险 case 开启。
-> - 默认 gate 条件：
->   - top1/top2 margin 低
->   - query ambiguity 高
->   - style negative 存在
->   - rule 与 multi_query 排名分歧大
->   - target-like candidates 分数接近
-> - 新增命令：
->   - `validate-rerank-gate`
->   - `compare-rerank-gates`
-> - LLM rerank 默认关闭；显式参数开启，默认 sample size 不超过 30。
->
-> ## Experiments
->
-> 第一轮不跑真实 LLM：
->
-> ```powershell
-> python -m mocktesting.mock_retriever evaluate-graded --split test --limit 60
-> python -m mocktesting.mock_retriever analyze-failures --split test --limit 60
-> python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 60
-> python -m mocktesting.mock_retriever validate-style-risk-mining --split test --limit 60
-> ```
->
-> 第二轮小样本 LLM：
->
-> ```powershell
-> python -m mocktesting.mock_retriever build-graded-qrels --split test --limit 60 --llm-sample-size 30
-> python -m mocktesting.mock_retriever validate-rerank-gate --split test --limit 60 --llm-sample-size 30
-> ```
->
-> 对比矩阵固定为：
->
-> - `baseline`: `hybrid_rrf_constraints`
-> - `signature`: `hybrid_rrf_constraints_signature`
-> - `adaptive`: `adaptive_signature`
-> - `gated_rerank`: `adaptive_signature + rerank_gate`
->
-> ## Test Plan
->
-> - 单元测试：
->   - graded qrels 解析、去重、非法 grade 拒绝
->   - nDCG/MRR/Judged@K 指标计算正确
->   - scene signature fallback 不产生空签名
->   - negative style 不进入 positive query/signature
->   - style risk 命中时产生 penalty 和 explainable hits
->   - rerank gate 只选择低置信/高风险 case
->
-> - 集成测试：
->   - `evaluate-graded` 能读取 qrels 并生成 JSON/Markdown
->   - `analyze-failures` 能对 paraphrase/fuzzy 报告归因
->   - `validate-scene-signature` 对同一 eval set 输出 workflow 对比
->   - `validate-style-risk-mining` 能发现软性风格负例
->   - 默认命令不调用 LLM
->   - 全量 `pytest --basetemp .pytest-tmp/<name> -p no:cacheprovider` 通过
->
-> - 性能验收：
->   - `compare-query-understanding --limit 60` 仍保持秒级
->   - `validate-fuzzy-understanding --limit 60` 不因 signature 增加超过 30% 耗时
->   - LLM sample 报告必须记录 call 数、fallback 数、cache hit rate
->
-> ## Assumptions
->
-> - 本轮只改 `src/mocktesting` 实验链路，不收敛到正式 retrieval。
-> - 不引入外部向量数据库。
-> - 不训练模型。
-> - LLM 只用于 qrels 抽样、失败样本裁判和 gated rerank 对照，默认关闭。
-> - 当前 matrix embedding cache 继续作为默认加速路径。
-> - 如果 exact scene 与 fuzzy 多解冲突，以 graded qrels/nDCG 作为更可信指标，不只看 single target recall。
->
-> Plan implementation
->
-> Status: completed
 > # SceneWeaver 检索实验平台下一阶段计划
 >
 > ## Summary
@@ -4536,28 +4005,11 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 > - 当前 matrix embedding cache 继续作为默认加速路径。
 > - 如果 exact scene 与 fuzzy 多解冲突，以 graded qrels/nDCG 作为更可信指标，不只看 single target recall。
 
-<details><summary>158 previous messages</summary>
+<details><summary>108 previous messages</summary>
 
 > 我开始落地这一轮。先把现有 mocktesting 命令、ranking keys 和报告结构快速对齐一下，然后按“可先跑通的 v1”实现：graded qrels/指标、失败归因、scene signature、style risk mining 和 gated rerank 的规则版。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg -n "RANKING_KEYS|STYLE_ALIASES|class PreparedMockIndex|class FastCaseSignals|def main|def validate_fuzzy_understanding_command|def validate_paraphrase_stress_command|def rank_fast_cases|def fast_scores_for_key|def fast_result_row|def markdown_report|def summarize_fuzzy_rows|def summarize_paraphrase_rows|def write_json|def read_cases" src/mocktesting/mock_retriever.py`
-> - Ran `Get-Content tests/test_mock_embedding_retriever.py | Select-Object -First 260`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -First 380`
->
-> </details>
->
 > 我会把这轮做成一个“规则版完整骨架”，先不接真实 LLM：所有新命令都能跑、报告结构稳定、指标和失败归因可用；后续再把 LLM qrels/rerank 接进同一个接口。这样风险小，也不会把成本入口偷偷打开。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 720 -First 500`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 2900 -First 260`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 1680 -First 500`
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 360 -First 110`
->
-> </details>
 >
 > 我先改核心 ranking 层：新增 signature ranking keys、扩展 style risk 词表，并在 PreparedMockIndex 里预编译签名和风格风险。然后再补命令和评估指标。
 >
@@ -4626,25 +4078,13 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 命令参数已经注册；接下来补 dispatch 和命令实现。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+44 -0)
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 1220 -First 160`
 >
 > </details>
 >
 > 我现在加评估 infra：qrels 读写/验证、nDCG/MRR/Judged@K、实验 metadata、失败归因和几个新命令的执行体。
->
-> <details><summary>Edited 1 file</summary>
->
-> - Wrote `./src/mocktesting/mock_retriever.py` (+104 -5)
->
-> </details>
->
-> Stream error
->
-> Reconnecting 1/5
-> stream disconnected before completion: stream closed before response.completed
 >
 > <details><summary>Edited 1 file</summary>
 >
@@ -4670,30 +4110,15 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 我也把 workflow 对比矩阵扩成计划里固定的 baseline/signature/adaptive，这样旧命令能一起看到 signature 的增益。
 >
-> <details><summary>Edited 1 file, ran 1 command</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+2 -0)
-> - Ran `Get-Content src/mocktesting/mock_retriever.py | Select-Object -Skip 1320 -First 120`
 >
 > </details>
 >
 > 先跑一轮聚焦测试，捕捉语法和关键 fast path 问题。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\infra-target1 -p no:cacheprovider`
->
-> </details>
->
 > 现有测试没被破坏。现在我用新命令做小样本 smoke，确保 CLI 和报告结构能真实跑起来。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever evaluate-graded --split test --limit 6 --output .tmp\graded_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever analyze-failures --split test --limit 6 --output .tmp\failures_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 6 --output .tmp\signature_smoke.json`
->
-> </details>
 >
 > smoke 能跑，但 signature 权重在小样本上明显太重，压过了原本稳定的 RRF/constraint。我会把它降成“微调信号”，先保证不大幅伤害 baseline，再让实验报告自己判断是否启用。
 >
@@ -4705,14 +4130,6 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 > </details>
 >
 > 继续 smoke style risk、hard negative 和 rerank gate。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-style-risk-mining --split test --limit 6 --output .tmp\style_risk_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever validate-rerank-gate --split test --limit 6 --output .tmp\rerank_gate_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever build-graded-qrels --split test --limit 6 --qrels-output .tmp\qrels_smoke.jsonl --output .tmp\qrels_smoke_report.json`
->
-> </details>
 >
 > style-risk smoke 在我这边因为新 query 需要补 embedding 而失败，原因是当前 shell 没有 dashscope；这和之前单条 search 一样，不是排序/命令结构问题。你的 `video_expert_analyzer` 环境可以补 cache。为了代码可测，我会用 fake cache 单测覆盖新逻辑。
 >
@@ -4730,265 +4147,31 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 我接着从上一次的实现状态往下收口：先跑新增的聚焦测试，看哪些地方还没对齐，然后再补 CLI 冒烟和必要修正。这个阶段我会优先保证实验链路“可信可跑”，不把不稳定的 signature 策略包装成已经变好。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `git status --short`
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\infra-target2 -p no:cacheprovider`
->
-> </details>
->
 > 聚焦测试已经过了，新增单元覆盖没有立刻冒烟。接下来我跑一组小样本 CLI，确认这些新命令真的能产出 JSON，而不是只有函数层面能过。
->
-> <details><summary>Ran 5 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever evaluate-graded --split test --limit 6 --output .tmp\graded_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 6 --output .tmp\signature_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever build-graded-qrels --split test --limit 6 --qrels-output .tmp\qrels_smoke.jsonl --output .tmp\qrels_smoke_report.json`
-> - Ran `python -m mocktesting.mock_retriever validate-rerank-gate --split test --limit 6 --output .tmp\rerank_gate_smoke.json`
-> - Ran `python -m mocktesting.mock_retriever analyze-failures --split test --limit 6 --output .tmp\failures_smoke.json`
->
-> </details>
 >
 > 新命令的小样本冒烟基本正常，只有风格风险挖掘那条此前已知会因为生成了未缓存 query、当前 shell 没有 embedding 配置而失败。我现在看一下实现，尽量让默认实验命令在没有真实 embedding 服务时也能降级跑完，这样 infra 更可靠。
 >
-> <details><summary>Ran 7 commands</summary>
->
-> - Ran `rg -n "validate_style_risk_mining|build_style_risk_case|precompute_fast_case_signals|embedding_setup_unavailable|style-risk" src\mocktesting\mock_retriever.py`
-> - Ran `rg -n "validate-style-risk-mining|build-graded-qrels|evaluate-graded|analyze-failures|validate-scene-signature" tests src\mocktesting\mock_retriever.py`
-> - Ran `rg -n "class PreparedMockIndex|class FastCaseSignals|def ensure_fast_semantic|def fast_scores_for_key|def rank_cases_with_signals" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1450 -First 90`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1970 -First 80`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 2860 -First 180`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3070 -First 140`
->
-> </details>
->
 > 我发现一个更直接的问题：`build_style_risk_case` 里的中文样本字符串确实已经变成源码级乱码，不只是终端显示。这会让“不要大厂味/广告感”等风格解析失真，也会制造未缓存 embedding 文本。先把这个修掉，再考虑降级策略。
->
-> <details><summary>Ran 10 commands</summary>
->
-> - Ran `rg -n "STYLE_ALIASES|STAGE_ALIASES|PURPOSE_ALIASES|澶|骞|闇|涓|鍛|瑕|銆|绋|浜" src\mocktesting\mock_retriever.py src\mocktesting\query_planner.py tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 620 -First 170`
-> - Ran `Get-Content -Path src\mocktesting\query_planner.py | Select-Object -First 240`
-> - Ran `Get-Content -Path src\mocktesting\query_planner.py | Select-Object -Skip 220 -First 220`
-> - Ran `Get-Content -Path src\mocktesting\query_planner.py | Select-Object -Skip 420 -First 200`
-> - Ran `Get-Content -Path tests\test_retrieval_query_plan.py | Select-Object -First 140`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -First 180`
-> - Ran `Get-Content -Path src\sceneweaver\retrieval\query_plan.py | Select-Object -First 260`
-> - Ran `Get-Content -Path src\sceneweaver\retrieval\style.py | Select-Object -First 220`
-> - Ran `rg -n "涓|澶|骞|闇|鐐|鎶|绾|鍙|銆|锛" src\sceneweaver src\mocktesting tests | Select-Object -First 200`
->
-> </details>
 >
 > 这里不是孤立的一行乱码，正式 `sceneweaver.retrieval.query_plan/style` 和 mock planner 的中文别名都有同类问题。虽然这轮主线只做 mocktesting，但 rule planner 依赖正式 query_plan，所以我会把这部分编码守卫一起修正，否则所有中文模糊理解实验都会建立在错误解析上。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `@'
-> samples = ["涓嶈", "寮€鍦?", "閾哄灚", "澶у巶鍛?", "骞垮憡鎰?", "鐐妧", "鎶€鏈睍绀?"]
-> for s in samples:
->     for enc in ['gbk','cp936','latin1']:
->         try:
->             print(s, enc, '->', s.encode(enc, errors='replace').decode('utf-8', errors='replace'))
->         except Exception as e:
->             pass
->     print()
-> '@ | python -`
-> - Ran `@'
-> samples = ["涓嶈", "寮€鍦?", "閾哄灚", "澶у巶鍛?", "骞垮憡鎰?", "鐐妧", "鎶€鏈睍绀?"]
-> for s in samples:
->     print('sample', repr(s), s.encode('unicode_escape').decode())
->     for enc in ['gbk','cp936','latin1']:
->         try:
->             out = s.encode(enc, errors='replace').decode('utf-8', errors='replace')
->             print(enc, repr(out), out.encode('unicode_escape').decode())
->         except Exception as e:
->             print(enc, e)
->     print()
-> '@ | python -`
-> - Ran `@'
-> samples = ["\u6d93\u5d76\u8a2b\ue6e6", "\u5bee\u20ac\u9366?", "\u95be\u54c4\u705a"]
-> for s in samples:
->     print('sample', s.encode('unicode_escape').decode())
->     for enc in ['gbk','cp936','latin1']:
->         try:
->             out = s.encode(enc, errors='replace').decode('utf-8', errors='replace')
->             print(enc, out.encode('unicode_escape').decode())
->         except Exception as e:
->             print(enc, e)
->     print()
-> '@ | python -`
->
-> </details>
->
 > 这些乱码里已经有部分字节被替换成 `?`，不能完全自动还原，所以需要手工恢复关键中文词表和 prompt 文案。好消息是范围比较清楚：约束解析、风格别名、mock planner 生成文本、相关测试。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content -Path src\sceneweaver\retrieval\query_plan.py | Select-Object -Skip 160 -First 140`
-> - Ran `Get-Content -Path src\sceneweaver\retrieval\models.py | Select-Object -First 180`
-> - Ran `Get-Content -Path tests\test_mock_embedding_retriever.py | Select-Object -First 260`
-> - Ran `Get-Content -Path src\mocktesting\eval_input_generator.py | Select-Object -First 160`
->
-> </details>
 >
 > 还有一个相关文件也中招了：`eval_input_generator.py` 里生成评测 query 的中文模板是乱码。这个会直接影响后续 fuzzy/paraphrase 样本质量，所以我会一并修；不是为了“美观”，而是为了让实验输入本身可信。
 >
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "€| |\?|涓|澶|骞|闇|鐐|鎶|绾|鍙|銆|锛|瑕|浠|寤|琛|妫|瀵" src\mocktesting src\sceneweaver\retrieval tests | Select-Object -First 300`
-> - Ran `Get-Content -Path src\mocktesting\eval_input_generator.py | Select-Object -Skip 120 -First 220`
-> - Ran `Get-Content -Path src\mocktesting\embedding_text_builder.py | Select-Object -First 220`
-> - Ran `Get-Content -Path src\mocktesting\constraint_layer.py | Select-Object -First 220`
->
-> </details>
->
 > 我重新核对了一下：PowerShell 的 `Get-Content` 输出本身会把 UTF-8 中文变成乱码，所以刚才看到的很多“乱码”其实可能是控制台解码假象。为了避免误判，我改用 Python 直接按 UTF-8 读文件并输出 `unicode_escape`，这样能确认源码真实内容。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `@'
-> from pathlib import Path
-> for p in [
->     Path('src/sceneweaver/retrieval/query_plan.py'),
->     Path('src/sceneweaver/retrieval/style.py'),
->     Path('src/mocktesting/query_planner.py'),
->     Path('src/mocktesting/eval_input_generator.py'),
->     Path('src/mocktesting/mock_retriever.py'),
-> ]:
->     text = p.read_text(encoding='utf-8')
->     suspicious = any(token in text for token in ['涓', '鐢', '澶', '骞', '\ufffd'])
->     print(p, 'suspicious=', suspicious)
->     for needle in ['不要', '大厂味', '广告感', '画面可以', '需要一', '世界500强', '把用户']:
->         if needle in text:
->             idx = text.index(needle)
->             snippet = text[max(0, idx-20): idx+80]
->             print('  hit', needle, snippet.encode('unicode_escape').decode('ascii'))
->     if suspicious:
->         for token in ['涓', '鐢', '澶', '骞']:
->             if token in text:
->                 idx = text.index(token)
->                 snippet = text[max(0, idx-20): idx+80]
->                 print('  suspicious snippet', snippet.encode('unicode_escape').decode('ascii'))
->                 break
-> '@ | python -`
->
-> </details>
 >
 > 确认结果有点细：`style.py / query_planner.py / eval_input_generator.py / mock_retriever.py` 的源码大体是真 UTF-8；`query_plan.py` 里仍有可疑字符，但 Python 直接读到的正则片段是正常中文。接下来我用模块运行结果来判定，而不是依赖终端显示。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `@'
-> from sceneweaver.retrieval import query_plan
-> for name in ['STAGE_ALIASES','PURPOSE_ALIASES','NEGATIVE_SPAN_RE','NEGATIVE_ALIAS_CANDIDATES']:
->     value = getattr(query_plan, name)
->     print(name, repr(value).encode('unicode_escape').decode('ascii')[:2000])
-> for text in ['不要技术展示，我真正要的是铺垫，要有人味', '年轻团队协作，不要大厂味，也不要广告感', '画面可以借用工厂、医生这类元素']:
->     plan = query_plan.build_query_plan(text)
->     print('INPUT', text.encode('unicode_escape').decode('ascii'))
->     print(plan.model_dump())
-> '@ | python -`
-> - Ran `@'
-> from sceneweaver.retrieval import query_plan
-> inputs = [
->     '\u4e0d\u8981\u6280\u672f\u5c55\u793a\uff0c\u6211\u771f\u6b63\u8981\u7684\u662f\u94fa\u57ab\uff0c\u8981\u6709\u4eba\u5473',
->     '\u5e74\u8f7b\u56e2\u961f\u534f\u4f5c\uff0c\u4e0d\u8981\u5927\u5382\u5473\uff0c\u4e5f\u4e0d\u8981\u5e7f\u544a\u611f',
->     '\u753b\u9762\u53ef\u4ee5\u501f\u7528\u5de5\u5382\u3001\u533b\u751f\u8fd9\u7c7b\u5143\u7d20',
-> ]
-> for text in inputs:
->     plan = query_plan.build_query_plan(text)
->     print('INPUT', text.encode('unicode_escape').decode('ascii'))
->     print(json := plan.model_dump())
->     print({k: (v.encode('unicode_escape').decode('ascii') if isinstance(v, str) else v) for k, v in json.items()})
-> '@ | python -`
->
-> </details>
->
 > 这个确认很关键：源码里的核心中文别名是正常 UTF-8，之前的乱码主要是 PowerShell 显示问题。`build_query_plan` 用真实中文输入能正确解析 `不要技术展示 -> forbidden_stage`、`不要大厂味 -> negative_style`，所以我不做大规模编码重写，只补真正需要的测试守卫。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `@'
-> from pathlib import Path
-> text = Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8')
-> for needle in ['需要一个', '不要大厂味', '世界500强', '把用户']:
->     idx = text.find(needle)
->     print(needle, idx)
->     if idx >= 0:
->         print(text[idx-50:idx+160].encode('unicode_escape').decode('ascii'))
-> '@ | python -`
-> - Ran `@'
-> from pathlib import Path
-> text = Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8')
-> needles = [
->     '\u9700\u8981\u4e00\u4e2a',
->     '\u4e0d\u8981\u5927\u5382\u5473',
->     '\u4e16\u754c500\u5f3a',
->     '\u628a\u7528\u6237',
-> ]
-> for needle in needles:
->     idx = text.find(needle)
->     print(needle.encode('unicode_escape').decode('ascii'), idx)
->     if idx >= 0:
->         print(text[idx-50:idx+160].encode('unicode_escape').decode('ascii'))
-> '@ | python -`
->
-> </details>
 >
 > `build_style_risk_case` 也确认是正常中文；因此 style-risk 命令失败不是乱码导致，而是它生成了新的自然语言 query，当前环境没有对应 embedding 缓存/服务。接下来我会给它加一个默认可跑的降级：embedding 缺失时返回带状态的报告，而不是直接崩掉；真实 embedding 环境下仍跑完整排序。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `@'
-> from pathlib import Path
-> text = Path('src/mocktesting/query_planner.py').read_text(encoding='utf-8')
-> for needle in ['把用户', '不要把', '需要一个', '理想经验卡', '高级']:
->     idx = text.find(needle)
->     print(needle.encode('unicode_escape').decode('ascii'), idx)
->     if idx >= 0:
->         print(text[idx-40:idx+120].encode('unicode_escape').decode('ascii'))
-> '@ | python -`
-> - Ran `@'
-> from pathlib import Path
-> text = Path('src/mocktesting/query_planner.py').read_text(encoding='utf-8')
-> needles = ['\u628a\u7528\u6237', '\u4e0d\u8981\u628a', '\u9700\u8981\u4e00\u4e2a', '\u7406\u60f3\u7ecf\u9a8c\u5361', '\u9ad8\u7ea7']
-> for needle in needles:
->     idx = text.find(needle)
->     print(needle.encode('unicode_escape').decode('ascii'), idx)
->     if idx >= 0:
->         print(text[idx-40:idx+120].encode('unicode_escape').decode('ascii'))
-> '@ | python -`
->
-> </details>
->
 > 我先不动中文源码，转去处理真正的稳定性问题：新实验生成 query 后，若没有缓存 embedding，应该能明确降级/报告缺口，而不是让命令异常退出。这样在没有 DashScope 的 shell 里也能知道“缺的是 embedding”，不会误以为算法坏了。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 4560 -First 80`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 330 -First 100`
->
-> </details>
 >
 > 我会让 `validate-style-risk-mining` 在 embedding 不可用时走一个“lexical + constraints + signature”的局部降级，而不是改其它命令的默认语义。风格风险挖掘本来就是约束/风险画像测试，这个降级仍然有评估价值，并且报告里会标明不是完整 semantic run。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg -n "def rank_cases_with_planner|def evaluate_graded_command|def validate_fuzzy_understanding_command|def compare_query_understanding_command|def rank_cases_with_signals" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 900 -First 140`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1640 -First 80`
->
-> </details>
->
 > 降级不应该偷偷改变主评估，所以我只会加在风格风险挖掘命令内部：如果 semantic embedding 失败，就构造零 semantic signal，再用 lexical/RRF/constraints/signature 继续输出，并在报告里写 `semantic_unavailable_fallback`。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1600 -First 75`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 160 -First 70`
->
-> </details>
 >
 > 我准备补两个很小的内部 ranking key：`lexical_constraints` 和 `lexical_constraints_signature`。它们不会改变默认主链路，但能让“没有 embedding 的实验环境”仍然评估词法召回、约束、签名和风格风险，而不是直接停掉。
 >
@@ -5008,27 +4191,7 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 现在跑风格风险挖掘的小样本。若当前 shell 没有 DashScope 或缓存缺口，它应该变成 `fallback_no_embedding`，但命令本身要成功退出。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-style-risk-mining --split test --limit 6 --output .tmp\style_risk_smoke.json`
-> - Ran `@'
-> import json
-> from pathlib import Path
-> p=Path('.tmp/style_risk_smoke.json')
-> data=json.loads(p.read_text(encoding='utf-8'))
-> print({k:data.get(k) for k in ['ranking_key','ranking_key_requested','semantic_status','semantic_error']})
-> print(data.get('embedding_cache',{}))
-> '@ | python -`
->
-> </details>
->
 > 风格风险命令现在能稳定产出报告，并清楚标了 `semantic_status=fallback_no_embedding`。不过这个降级下 `style_risk_violation_at_3` 很高，说明它只能作为“可跑的 infra 冒烟”，不能替代真实 embedding 环境下的质量判断，这点我会在最终说明里讲清楚。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path tests\test_mock_embedding_retriever.py | Select-Object -Skip 220 -First 260`
->
-> </details>
 >
 > 我再补两类测试：一类保证 qrels 的非法 grade 会被拒绝，另一类保证无 embedding 降级的 `lexical_constraints_signature` 真的能按签名/约束排序。这样新增 infra 不只是手工冒烟。
 >
@@ -5040,11 +4203,9 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 我需要在测试里用 `pytest.raises`，补一个轻量 import。
 >
-> <details><summary>Edited 1 file, ran 2 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./tests/test_mock_embedding_retriever.py` (+2 -0)
-> - Ran `rg -n "def validate_qrel|def load_qrels|def graded_metrics" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1836 -First 30`
 >
 > </details>
 >
@@ -5066,43 +4227,11 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 测试补完了，先跑聚焦集。这里如果失败，大概率是新增 ranking key 的集合或测试 fixture 细节。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\infra-target3 -p no:cacheprovider`
->
-> </details>
->
 > 聚焦测试 46 个全过。接下来我跑完整测试，再顺便验证新命令和报告生成没有因为新增 fallback 破掉。
->
-> <details><summary>Ran 5 commands</summary>
->
-> - Ran `pytest -q --basetemp .pytest-tmp\infra-full -p no:cacheprovider`
-> - Ran `python -m mocktesting.mock_retriever validate-style-risk-mining --split test --limit 6 --output .tmp\style_risk_smoke2.json`
-> - Ran `python -m mocktesting.mock_retriever analyze-failures --split test --limit 6 --output .tmp\failures_smoke2.json --markdown-output .tmp\failures_smoke2.md`
-> - Ran `python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 6 --output .tmp\signature_smoke2.json --markdown-output .tmp\signature_smoke2.md`
-> - Ran `python -m mocktesting.mock_retriever evaluate-graded --split test --limit 6 --output .tmp\graded_smoke2.json --markdown-output .tmp\graded_smoke2.md`
->
-> </details>
 >
 > 全量 pytest 也过了：125 passed。现在跑计划里第一轮 60 case 级别的命令，拿一组真实指标，看看 signature/adaptive 到底有没有提升。
 >
-> <details><summary>Ran 5 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever analyze-failures --split test --limit 60 --output .tmp\failures_test60.json --markdown-output .tmp\failures_test60.md`
-> - Ran `python -m mocktesting.mock_retriever evaluate-graded --split test --limit 60 --output .tmp\graded_test60.json --markdown-output .tmp\graded_test60.md`
-> - Ran `python -m mocktesting.mock_retriever validate-rerank-gate --split test --limit 60 --output .tmp\rerank_gate_test60.json`
-> - Ran `python -m mocktesting.mock_retriever compare-rerank-gates --split test --limit 60 --output .tmp\rerank_gates_test60.json`
-> - Ran `python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 60 --output .tmp\signature_test60.json --markdown-output .tmp\signature_test60.md`
->
-> </details>
->
 > 60 case 结果出来了：graded/failure/signature/gate 都能跑，且 signature 当前并没有成为最佳策略。`compare-rerank-gates` 暴露了一个 parser 参数缺失的小 bug，我现在补上。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 420 -First 80`
->
-> </details>
 >
 > `compare-rerank-gates` 复用了 `validate_rerank_gate_command`，但 parser 少挂了 `--llm-sample-size`。这是典型 CLI wiring 漏洞，补一行就好。
 >
@@ -5114,48 +4243,13 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 修好了，我重跑这条命令，并跑一下 hard negative mining 和实验对比，确认这几个新增入口都能完整走通。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever compare-rerank-gates --split test --limit 60 --output .tmp\rerank_gates_test60.json`
-> - Ran `python -m mocktesting.mock_retriever mine-hard-negatives --split test --limit 6 --output .tmp\hard_negatives_smoke.jsonl`
-> - Ran `python -m mocktesting.mock_retriever compare-experiments .tmp\graded_test60.json .tmp\failures_test60.json .tmp\signature_test60.json .tmp\rerank_gate_test60.json --output .tmp\experiment_compare_smoke.json`
->
-> </details>
->
 > 新增 CLI 入口现在都能跑。接下来做最后一轮测试，并检查通用 `generate-eval-report` 对这些新报告类型是否能生成可读 Markdown。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\infra-target4 -p no:cacheprovider`
-> - Ran `rg -n "def generate_eval_report|mock_graded|mock_failure|scene_signature|query_understanding|generate-eval-report" src\mocktesting\mock_retriever.py`
->
-> </details>
 >
 > 聚焦测试仍然通过。我现在打开报告生成函数确认它是否认识新报告类型；如果只会处理老 workflow/paraphrase，就补摘要分支。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 560 -First 70; Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 4300 -First 260`
->
-> </details>
->
 > 刚才打开位置偏了，我用 `rg` 精确定位 `markdown_report`。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg -n "markdown_report|render_.*report|Failure Analysis|nDCG|best_workflow" src\mocktesting\mock_retriever.py`
-> - Ran `rg -n "def markdown" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 2190 -First 180`
->
-> </details>
->
 > `markdown_report` 已经能渲染 summary、metrics、workflow、planner、variant 几类；但 signature 报告里的 workflow 结构是 `summary`，不是老的 `metrics.overall`，所以 Markdown 表可能空。我要给它补一条兼容分支。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1410 -First 55`
->
-> </details>
 >
 > signature 的 workflow 其实同时有 `metrics` 和 `summary`，老表能显示 recall/forbidden；不过它不会显示 scene/stage/purpose 风格指标。我会补一个通用 workflow summary 表，让新实验报告读起来更直接。
 >
@@ -5167,82 +4261,17 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 报告生成加了新 workflow summary 表。现在用通用 `generate-eval-report` 转几份刚生成的 JSON，看它是否正常输出 Markdown。
 >
-> <details><summary>Ran 6 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\failures_test60.json --output .tmp\failures_test60_generated.md`
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\signature_test60.json --output .tmp\signature_test60_generated.md`
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\graded_test60.json --output .tmp\graded_test60_generated.md`
-> - Ran `Get-Content -Path .tmp\signature_test60_generated.md | Select-Object -First 80`
-> - Ran `Get-Content -Path .tmp\graded_test60_generated.md | Select-Object -First 60`
-> - Ran `Get-Content -Path .tmp\failures_test60_generated.md | Select-Object -First 60`
->
-> </details>
->
 > 现在缺一组最关心的质量验证：fuzzy/paraphrase 在 signature ranking 下有没有真的改善。这个可能比普通 60 case 慢一点，但我跑一次 60 case，拿数据说话。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\fuzzy_signature_test60.json`
-> - Ran `python -m mocktesting.mock_retriever validate-paraphrase-stress --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\paraphrase_signature_test60.json`
->
-> </details>
 >
 > fuzzy 60 case 跑完了，但结果没有改善：scene@10 仍是 0.606667，stage@3 还略低到 0.916667，style_violation@3 到 0.1。paraphrase 这条当前 shell 因缺 DashScope 跑不了未缓存 query，我不会把它伪装成已验证。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --output .tmp\fuzzy_baseline_test60.json`
->
-> </details>
->
 > 对比 baseline 后，signature 只带来很小的 scene@3/@10 提升，但牺牲了 style_violation 和低置信率；这说明当前规则签名还不能直接作为默认质量策略。再跑 adaptive 看看动态权重有没有更稳。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key adaptive_signature --output .tmp\fuzzy_adaptive_test60.json`
->
-> </details>
->
 > adaptive 也只是小幅提升 scene@10 到 0.61，离 0.70 很远，而且风格违规更差。这不是“调个权重就成功”的状态；我会看几个 worst case 和 signature 分数，找是不是签名字段太粗或风格 penalty 不够。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "def build_fuzzy_understanding_variants|def infer_scene_signature|SIGNATURE_ALIASES|SIGNATURE_FIELD_WEIGHTS|def ensure_fast_constraints|STYLE_NEGATIVE_PENALTY" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 2800 -First 150`
-> - Ran `@'
-> import json
-> from pathlib import Path
-> for name in ['fuzzy_baseline_test60','fuzzy_signature_test60','fuzzy_adaptive_test60']:
->     data=json.loads(Path(f'.tmp/{name}.json').read_text(encoding='utf-8'))
->     print('\n', name, data['summary'])
->     cases=data.get('cases', [])
->     misses=[r for r in cases if not r.get('target_rank') or r['target_rank']>10]
->     print('misses', len(misses))
->     for r in misses[:3]:
->         print(r['case_id'], r.get('variant_type'), 'rank', r.get('target_rank'), 'stage3', r.get('stage_hit_at_3'), 'purpose3', r.get('purpose_hit_at_3'))
->         print('q', r['user_input'].encode('unicode_escape').decode('ascii')[:240])
->         print('target', r.get('target_item_id'))
->         print('top', [(x['item_id'], x.get('score'), x.get('signature_score'), x.get('constraint_hits')) for x in r.get('top_results', [])[:3]])
-> '@ | python -`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3210 -First 130`
->
-> </details>
 >
 > 样本解释也印证了问题：当前签名层很多候选都被打成 `signature_score=1.0`，它区分不了“同一用途下的具体 scene”，反而会把同阶段/同风格候选一起推上来。接下来我只做保守优化：让签名 fallback 不再把同一批泛化词塞进所有字段，减少虚假的满分。
 >
 > 这个改动属于质量修正，不是为了追求指标：签名字段为空时用全文前几个 token 填满每个字段，会制造“每个候选都很像”的假相似度。改成空字段保持空，只让 `script_reuse_pattern` 承担文本兜底。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `@'
-> from pathlib import Path
-> text=Path('src/mocktesting/mock_retriever.py').read_text(encoding='utf-8')
-> start=text.index('SIGNATURE_FIELD_WEIGHTS')
-> end=text.index('def infer_scene_signature')
-> print(text[start:end].encode('unicode_escape').decode('ascii'))
-> '@ | python -`
->
-> </details>
 >
 > 我会保持 signature 不空，但不再把全文 fallback 复制到 `people/place/action/objects/camera`。这能降低“签名分全都 1.0”的幻觉式相似。
 >
@@ -5254,34 +4283,7 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 签名 fallback 修完，先跑聚焦测试，再重跑 fuzzy 三个 workflow 看变化。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\infra-target5 -p no:cacheprovider`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\fuzzy_signature_test60_v2.json`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key adaptive_signature --output .tmp\fuzzy_adaptive_test60_v2.json`
->
-> </details>
->
 > 签名 fallback 修正后 scene@10 从 0.6067 到 0.6133，低置信也下降，但 style_violation 仍变差。下一步我看风格负例解析是否覆盖“宣传片腔/汇报片/口号感”等扩展风险词；如果 query 侧没解析出来，penalty 再高也没用。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3630 -First 55`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3330 -First 70`
-> - Ran `@'
-> from mocktesting.query_planner import plan_queries
-> texts = [
-> '\u9ad8\u7ea7\u4f46\u522b\u7aef\u7740\uff0c\u8981\u771f\u5b9e\u3001\u6709\u6e29\u5ea6\uff0c\u4e0d\u8981\u5ba3\u4f20\u7247\u8154',
-> '\u60f3\u8981\u771f\u5b9e\u4e00\u70b9\u3001\u6709\u73b0\u573a\u611f\uff0c\u522b\u592a\u50cf\u6c47\u62a5\u7247',
-> '\u4e0d\u8981\u5927\u5382\u5473\uff0c\u4e0d\u8981\u5e7f\u544a\u611f\uff0c\u4e5f\u4e0d\u8981\u70ab\u6280',
-> ]
-> for p in plan_queries(texts, planner='multi_query').plans:
->     print(p.original_text.encode('unicode_escape').decode())
->     print('neg_style', p.negative_style, 'neg_constraints', [x.encode('unicode_escape').decode() for x in p.negative_constraints], 'pos_style', p.positive_style)
-> '@ | python -`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3380 -First 55`
->
-> </details>
 >
 > query 侧扩展风险词是能补上的，例如“汇报片”会在 `negative_styles_for_signal` 里被识别为 `corporate_report_tone`。我接下来把 soft style penalty 稍微加重，目标是把 style_violation 压回去，同时看 scene@10 会不会被破坏。
 >
@@ -5293,22 +4295,11 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 风格 penalty 调到 2.2 后重跑 fuzzy 三组。这个值仍是 soft penalty，不会像 stage forbidden 那样 hard veto。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --output .tmp\fuzzy_baseline_test60_penalty22.json`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\fuzzy_signature_test60_penalty22.json`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key adaptive_signature --output .tmp\fuzzy_adaptive_test60_penalty22.json`
->
-> </details>
->
 > 2.2 把 style_violation 压到 0，但代价太大：scene@3 和 stage@3 明显掉了。这不值得作为默认。回退到更温和的 1.7 测一下，找一个不破坏粗粒度命中的折中点。
 >
-> <details><summary>Edited 1 file, ran 3 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+1 -1)
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --output .tmp\fuzzy_baseline_test60_penalty17.json`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints_signature --output .tmp\fuzzy_signature_test60_penalty17.json`
-> - Ran `python -m mocktesting.mock_retriever validate-fuzzy-understanding --split test --limit 60 --query-planner multi_query --ranking-key adaptive_signature --output .tmp\fuzzy_adaptive_test60_penalty17.json`
 >
 > </details>
 >
@@ -5322,41 +4313,11 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 我回到 1.5，并重新跑最终的 signature validation 与全量测试，确保最终代码状态对应最后报告。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-scene-signature --split test --limit 60 --output .tmp\signature_test60_final.json --markdown-output .tmp\signature_test60_final.md`
-> - Ran `pytest -q --basetemp .pytest-tmp\infra-full-final -p no:cacheprovider`
->
-> </details>
->
 > 最终全量测试过了。最后我测一下用户之前很关心的 `compare-query-understanding` 秒级情况，确认这轮 infra 没让它退回分钟级。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Measure-Command { python -m mocktesting.mock_retriever compare-query-understanding --split test --limit 60 --query-planners rule,multi_query,hyde_card | Out-Host } | Select-Object TotalSeconds`
->
-> </details>
 >
 > `compare-query-understanding --limit 60` 现在约 1.57 秒，仍是秒级，没有退回慢路径。接下来我看一眼 diff 和工作区状态，确认改动范围、有没有生成物需要提醒。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `git status --short`
-> - Ran `git diff --stat`
-> - Ran `git diff -- src\mocktesting\mock_retriever.py tests\test_mock_embedding_retriever.py | Select-Object -First 260`
->
-> </details>
->
 > 代码范围比较大，里面包含前面几轮已经存在的未提交改动；我这轮没有清理或回滚它们。最后我再确认新增 ranking key 在 fast path 可用，旧路径如果有人手动传这些 key 会不会报错。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "def rank_items_for_key|def rerank_with_ranking_key|def rerank_with_workflow|Unknown ranking key" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3590 -First 90`
-> - Ran `rg -n "validate-ranking-keys|ranking_keys|rank_items_for_key\(" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 260 -First 60; Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 840 -First 70`
->
-> </details>
 >
 > 我发现一个兼容性坑：`validate-ranking-keys` 是旧 precomputed 路径，它会遍历全局 `RANKING_KEYS`；现在全局里有 signature fast-path key，旧路径会不认识。这个必须修，否则老回归命令会坏。修法是让旧命令只验证 legacy key，新 signature 用 `validate-scene-signature`。
 >
@@ -5368,20 +4329,7 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > legacy validation key 范围已固定，现在跑一条小样本 `validate-ranking-keys`，再跑最终全测。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-ranking-keys --split test --limit 6 --output .tmp\ranking_keys_smoke.json`
-> - Ran `pytest -q --basetemp .pytest-tmp\infra-full-final2 -p no:cacheprovider`
->
-> </details>
->
 > `validate-ranking-keys` 又暴露一个下游 helper 仍在读全局 `RANKING_KEYS`。我把 pairwise helper 改成用传入的 ranked keys，而不是全局列表。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3790 -First 90`
->
-> </details>
 >
 > 这个 helper 本来应该天然按传入数据工作，我做这个小修正。
 >
@@ -5393,50 +4341,9 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 再跑这条旧命令，确认 legacy 兼容修完。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `python -m mocktesting.mock_retriever validate-ranking-keys --split test --limit 6 --output .tmp\ranking_keys_smoke.json`
->
-> </details>
->
 > 旧 ranking validation 也恢复了。最后跑一次全量 pytest，作为最终状态。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q --basetemp .pytest-tmp\infra-full-final3 -p no:cacheprovider`
->
-> </details>
->
 > 全量测试最终通过。现在我整理一下最终改动和关键实验结果，准备给你一个诚实的结论：平台能力补上了，但 scene 排序质量还没有达到目标阈值。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `git status --short`
-> - Ran `@'
-> import json
-> from pathlib import Path
-> files = [
-> ('.tmp/graded_test60.json','graded'),
-> ('.tmp/failures_test60.json','failures'),
-> ('.tmp/signature_test60_final.json','signature'),
-> ('.tmp/fuzzy_baseline_test60.json','fuzzy_base'),
-> ('.tmp/fuzzy_signature_test60_v2.json','fuzzy_sig'),
-> ('.tmp/fuzzy_adaptive_test60_v2.json','fuzzy_adapt'),
-> ('.tmp/rerank_gate_test60.json','gate'),
-> ('.tmp/rerank_gates_test60.json','gates'),
-> ('.tmp/style_risk_smoke2.json','style_risk'),
-> ]
-> for path,label in files:
->     p=Path(path)
->     if not p.exists():
->         continue
->     data=json.loads(p.read_text(encoding='utf-8'))
->     print(label, data.get('summary', data))
->     if label == 'style_risk':
->         print('style_status', data.get('semantic_status'), data.get('ranking_key'))
-> '@ | python -`
->
-> </details>
 </details>
 
 已继续实现并收口这一轮实验平台能力，重点落在：
@@ -5563,29 +4470,11 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 
 > 你能帮我实现吗？难度大吗？如果不大，请帮我实现，按照 开发/优化/实验/评估/分析结果/给出下一阶段展望的方式继续
 
-<details><summary>54 previous messages</summary>
+<details><summary>36 previous messages</summary>
 
 > 可以做，难度中等，不是“大模型训练级”的大工程。最划算的实现切口是先补“pooled qrels + oracle/recall-bound 诊断 + active judging sampler”，这些都能复用现有 fast path，不需要外部向量库，也不默认调用 LLM。
 >
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "build-graded-qrels|evaluate-graded|analyze-failures|validate-scene-signature|compare-experiments|def .*qrels|oracle|pool|active" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 330 -First 170`
-> - Ran `Get-Content -Path tests\test_mock_embedding_retriever.py | Select-Object -First 360`
-> - Ran `git status --short`
->
-> </details>
->
 > 我会按最小闭环来做：新增 `build-pooled-qrels`、`evaluate-pooled`、`analyze-recall-bound`、`sample-active-qrels`、`compare-strong-baselines`。其中 strong baseline 先放 `rule_rerank`/`oracle_reference` 这类默认无 LLM 的对照，避免引入不可控成本。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1120 -First 260`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1280 -First 180`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1620 -First 200`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1870 -First 90`
->
-> </details>
 >
 > 我开始编辑前先说明一下实现边界：这轮不会接外部 reranker，也不会把 LLM judge 默认打开；我会把“企业常用的两阶段/pooled/qrels/oracle 诊断”先做成可跑的实验平台接口。这样后续接 DashScope rerank 或人工标注时，数据结构已经稳了。
 >
@@ -5605,34 +4494,15 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > CLI 壳子已经加好，接下来把 dispatch 接上，并补对应实现函数。
 >
-> <details><summary>Edited 1 file, ran 2 commands</summary>
->
-> - Wrote `./src/mocktesting/mock_retriever.py` (+42 -14)
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 520 -First 110`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 630 -First 110`
->
-> </details>
->
 > dispatch 位置和上一轮略有差异，我按当前文件结构插入，不碰其它旧分支。
 >
-> <details><summary>Edited 1 file, ran 3 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+28 -0)
-> - Ran `rg -n "def parse_query_planner_list|def parse_.*list|def compact_case_rows|def fast_result_row|def rank_fast_cases" src\mocktesting\mock_retriever.py`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3430 -First 120`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 4490 -First 110`
 >
 > </details>
 >
 > 接下来会加一批复用 helper：一次生成多个 workflow/planner 的 rows、构造 pooled qrels、计算 ERR/Unjudged、做 oracle rerank 和 active sample。这些都是 mocktesting 内部函数，不改正式 retrieval。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 2770 -First 40; Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3540 -First 70; Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 3830 -First 55`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1820 -First 45`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1950 -First 55`
->
-> </details>
 >
 > 现在进入主体实现：我会先写可复用函数，再让命令调用它们；这样不会把每个 CLI 写成一坨重复逻辑。
 >
@@ -5663,37 +4533,9 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 核心函数已写完，我先跑一次静态级别的小测试/导入，看看有没有参数名或结构错位。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever build-pooled-qrels --split test --limit 6 --pool-depth 5 --pool-ranking-keys hybrid_rrf_constraints,hybrid_rrf_constraints_signature --pool-query-planners rule --qrels-output .tmp\pooled_qrels_smoke.jsonl --output .tmp\pooled_qrels_smoke.json`
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py --basetemp .pytest-tmp\pooled-target1 -p no:cacheprovider`
->
-> </details>
->
 > `build-pooled-qrels` 小样本已经跑通，并且新指标 `ERR@10/Unjudged@10` 正常出现。接下来跑剩下几个新命令冒烟。
 >
-> <details><summary>Ran 5 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever analyze-recall-bound --split test --limit 6 --candidate-depth 20 --output .tmp\recall_bound_smoke.json --markdown-output .tmp\recall_bound_smoke.md`
-> - Ran `python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 6 --pool-depth 5 --sample-size 12 --pool-ranking-keys hybrid_rrf_constraints,hybrid_rrf_constraints_signature --qrels .tmp\pooled_qrels_smoke.jsonl --output .tmp\active_qrels_smoke.jsonl`
-> - Ran `python -m mocktesting.mock_retriever evaluate-pooled --split test --limit 6 --qrels .tmp\pooled_qrels_smoke.jsonl --output .tmp\evaluate_pooled_smoke.json --markdown-output .tmp\evaluate_pooled_smoke.md`
-> - Ran `python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 6 --qrels .tmp\pooled_qrels_smoke.jsonl --output .tmp\strong_baselines_smoke.json --markdown-output .tmp\strong_baselines_smoke.md`
-> - Ran `python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 6 --pool-depth 5 --sample-size 12 --pool-ranking-keys hybrid_rrf_constraints,hybrid_rrf_constraints_signature --qrels .tmp\missing_qrels.jsonl --output .tmp\active_qrels_smoke_missing.jsonl`
->
-> </details>
->
 > 新命令冒烟都通过了。`sample-active-qrels` 在已有 qrels 覆盖完整的小池子里会返回 0，这是合理的；换成不存在的 qrels 文件会挑出 11 个待标注样本。接下来我补测试和 Markdown 表格。
->
-> <details><summary>Edited 1 file</summary>
->
-> - Wrote `./src/mocktesting/mock_retriever.py` (+12 -5)
->
-> </details>
->
-> Stream error
->
-> Reconnecting 1/5
-> stream disconnected before completion: stream closed before response.completed
 >
 > <details><summary>Edited 1 file</summary>
 >
@@ -5719,44 +4561,9 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 新增测试已经写好，现在跑聚焦测试。如果这里失败，多半是新 helper 的边界条件，需要马上修。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\pooled-target2 -p no:cacheprovider`
-> - Ran `python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 6 --qrels .tmp\pooled_qrels_smoke.jsonl --output .tmp\strong_baselines_smoke2.json --markdown-output .tmp\strong_baselines_smoke2.md`
->
-> </details>
->
 > 聚焦测试 50 个通过。现在跑 60 case 的新实验，拿这一轮真实指标：pooled qrels、pooled eval、recall bound、active sampler、strong baselines。
 >
-> <details><summary>Ran 6 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever build-pooled-qrels --split test --limit 60 --pool-depth 20 --pool-ranking-keys semantic_only,lexical_only,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --pool-query-planners rule --qrels-output .tmp\pooled_qrels_test60.jsonl --output .tmp\pooled_qrels_test60.json`
-> - Ran `python -m mocktesting.mock_retriever analyze-recall-bound --split test --limit 60 --candidate-depth 100 --pool-ranking-keys semantic_only,lexical_only,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\recall_bound_test60.json --markdown-output .tmp\recall_bound_test60.md`
-> - Ran `python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 60 --pool-depth 20 --sample-size 80 --pool-ranking-keys semantic_only,lexical_only,hybrid_rrf_constraints,hybrid_rrf_constraints_signature,adaptive_signature --qrels .tmp\missing_pooled_qrels.jsonl --output .tmp\active_qrels_test60.jsonl`
-> - Ran `python -m mocktesting.mock_retriever evaluate-pooled --split test --limit 60 --ranking-key hybrid_rrf_constraints --qrels .tmp\pooled_qrels_test60.jsonl --output .tmp\evaluate_pooled_test60.json --markdown-output .tmp\evaluate_pooled_test60.md`
-> - Ran `python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_test60.jsonl --output .tmp\strong_baselines_test60.json --markdown-output .tmp\strong_baselines_test60.md`
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\strong_baselines_test60.json --output .tmp\strong_baselines_test60_generated.md`
->
-> </details>
->
 > `generate-eval-report` 那条是并行抢跑了，报告文件还没落盘时它先读，所以失败不是实现问题。我后面单独重跑。关键指标已经出来：oracle rerank@20 有明显上界提升，说明候选池里有不少可用结果，主要问题偏 rerank/排序而不是召回。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\strong_baselines_test60.json --output .tmp\strong_baselines_test60_generated.md`
-> - Ran `Get-Content -Path .tmp\strong_baselines_test60_generated.md | Select-Object -First 100`
-> - Ran `@'
-> import json
-> from pathlib import Path
-> for path in ['.tmp/pooled_qrels_test60.json','.tmp/evaluate_pooled_test60.json','.tmp/recall_bound_test60.json','.tmp/strong_baselines_test60.json']:
->     data=json.loads(Path(path).read_text(encoding='utf-8'))
->     print(path, data.get('summary'))
->     if 'baselines' in data:
->         for name,row in data['baselines'].items():
->             print(' ', name, row['graded_metrics'])
-> '@ | python -`
->
-> </details>
 >
 > Markdown 里 strong baseline 顶部 `case_count` 显示 0，是报告顶层少放了字段，summary 里其实有 39。我补这个小字段，避免读报告时误会。
 >
@@ -5776,76 +4583,13 @@ python -m mocktesting.mock_retriever validate-fuzzy-understanding --query-planne
 >
 > 现在跑最终测试和几个新命令的最终冒烟，确认修正没有引入回归。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `pytest -q tests\test_mock_embedding_retriever.py tests\test_retrieval_query_plan.py --basetemp .pytest-tmp\pooled-target3 -p no:cacheprovider`
-> - Ran `python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 6 --qrels .tmp\pooled_qrels_smoke.jsonl --output .tmp\strong_baselines_smoke3.json --markdown-output .tmp\strong_baselines_smoke3.md`
-> - Ran `python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 6 --pool-depth 5 --sample-size 12 --pool-ranking-keys hybrid_rrf_constraints,hybrid_rrf_constraints_signature --qrels .tmp\missing_qrels.jsonl --output .tmp\active_qrels_smoke3.jsonl`
->
-> </details>
->
 > 聚焦测试和新命令冒烟都过了。最后跑全量 pytest，然后整理实验指标和结论。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `pytest -q --basetemp .pytest-tmp\pooled-full -p no:cacheprovider`
->
-> </details>
->
 > 全量测试通过：129 passed。现在我会做最后的工作区检查和结果摘要，不再改核心代码。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `git status --short`
-> - Ran `git diff --stat`
-> - Ran `@'
-> import json
-> from pathlib import Path
-> for path in ['.tmp/pooled_qrels_test60.json','.tmp/evaluate_pooled_test60.json','.tmp/recall_bound_test60.json','.tmp/strong_baselines_test60.json']:
->     p=Path(path)
->     if not p.exists():
->         continue
->     data=json.loads(p.read_text(encoding='utf-8'))
->     print(path)
->     print(json.dumps(data.get('summary',{}), ensure_ascii=False, sort_keys=True))
-> '@ | python -`
->
-> </details>
 >
 > 这轮代码和实验已经收口。一个重要解读先放这里：`oracle_recall@100=1.0` 且 `qrels_oracle_rerank@20` 的 nDCG@10 比 baseline 高 0.3089，说明这批普通 test positive 主要不是召回缺失，而是 top20 内排序/重排能力不足。
 >
 > 我最后重跑一次 60 case strong baseline 报告，让 `.tmp` 里的报告也对应最新的 `case_count` 顶层字段。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_test60.jsonl --output .tmp\strong_baselines_test60.json --markdown-output .tmp\strong_baselines_test60.md`
-> - Ran `python -m mocktesting.mock_retriever generate-eval-report --input .tmp\strong_baselines_test60.json --output .tmp\strong_baselines_test60_generated.md`
->
-> </details>
->
-> 已实现，难度中等但可控。这轮主要补的是“可信评测 infra”，不是继续硬调排序公式。
->
-> **开发/优化**
-> 在 [src/mocktesting/mock_retriever.py](./src/mocktesting/mock_retriever.py) 新增了 5 个实验命令：
->
-> - `build-pooled-qrels`：多 workflow pooling，生成 pooled graded qrels
-> - `evaluate-pooled`：用 pooled qrels 评估 nDCG / ERR / MRR / Judged / Unjudged
-> - `analyze-recall-bound`：诊断召回失败还是排序/融合失败
-> - `sample-active-qrels`：自动
->
-> Stream error
->
-> Reconnecting 1/5
-> stream disconnected before completion: stream closed before response.completed
->
-> <details><summary>Plan</summary>
->
-> - [x] 梳理现有 mocktesting 评估/报告结构，确定最小可落地接口
-> - [x] 实现 pooled qrels、oracle/recall-bound、active sampler 与 strong baseline 命令
-> - [x] 补单元/集成测试，保护旧命令兼容
-> - [x] 跑实验并输出当前质量分析与下一阶段建议
->
-> </details>
 </details>
 
 已实现，难度中等但可控。这轮主要补的是“可信评测 infra”，不是继续堆一个新排序权重。
@@ -5975,7 +4719,7 @@ strong baseline：
 >
 > 看看是否有更好的方案，如果已经是最好的方案了，那就实现它吧
 
-<details><summary>24 previous messages</summary>
+<details><summary>43 previous messages</summary>
 
 > 我不觉得“差”，更像是我给的是偏严格的工程分数：现在已经不是玩具，但还没到能自信宣布“策略选型稳定”的程度。你这轮要继续推进，我先按你的要求查一下行业和论文里对“标注可信度 + reranker + fuzzy 多解评估”的共识，再落到代码。
 >
@@ -5996,15 +4740,6 @@ strong baseline：
 > </details>
 >
 > 检索结论很清楚：这不是我凭感觉编的路线。TREC/BEIR 这类检索评测传统支持 pooled qrels 和 graded relevance；Pinecone/Azure 等企业搜索文档也把“先召回、再对 top-N rerank”当成熟路径；同时 LLM judge 可以辅助，但不能无脑当黄金标签。接下来我会把“标注可信度 + gated reranker + fuzzy 多解评估”继续落成实验命令。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "class VisionLLMClient|analyze_text_json|dashscope|rerank|llm_sample|run_llm" src tests`
-> - Ran `Get-Content -Path src\sceneweaver\llm\client.py | Select-Object -First 260`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 2510 -First 150`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 4300 -First 120`
->
-> </details>
 >
 > 我会继续做三块：`audit-qrels` 提升标注可信度可见性，`evaluate-fuzzy-multirelevance` 用 graded 多解指标评 fuzzy，不再只盯 exact target，`compare-strong-baselines` 增加可选 LLM rerank 接口。默认仍不调用 LLM。
 >
@@ -6044,7 +4779,6 @@ strong baseline：
 >
 > <details><summary>Edited 1 file</summary>
 >
-> - Wrote `./src/mocktesting/mock_retriever.py` (+0 -0)
 > - Wrote `./src/mocktesting/mock_retriever.py` (+48 -0)
 >
 > </details>
@@ -6059,11 +4793,9 @@ strong baseline：
 >
 > 现在补 fuzzy 评估和 LLM rerank 用到的小 helper。LLM rerank 会输出 JSON item_id 排序；失败时默认 fallback，不会中断实验，除非显式 `--require-llm-rerank`。
 >
-> <details><summary>Edited 1 file, ran 2 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `./src/mocktesting/mock_retriever.py` (+114 -0)
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1725 -First 90`
-> - Ran `Get-Content -Path src\mocktesting\mock_retriever.py | Select-Object -Skip 1815 -First 90`
 >
 > </details>
 >
@@ -6083,12 +4815,3477 @@ strong baseline：
 >
 > </details>
 >
-> <details><summary>Plan</summary>
+> 我会加这个 helper 到 ranking 工具函数附近，保持 fuzzy 评估和原有 validate-fuzzy 的字段一致。
 >
-> - [x] 查阅检索评测与 rerank 最佳实践，确认方案方向
-> - [ ] 实现 qrels 可信度审计、fuzzy 多解评估、可选 LLM rerank 接口
-> - [ ] 补测试并跑核心命令/实验
-> - [ ] 分析结果并给出下一阶段展望
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+16 -0)
 >
 > </details>
+>
+> 接着补测试：qrels 置信度审计、LLM rerank 解析排序、fuzzy variant 元数据贴回。不会调用真实 LLM，用 fake client monkeypatch。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+4 -0)
+>
+> </details>
+>
+> 把测试插到 qrels/rarank 附近。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+68 -0)
+>
+> </details>
+>
+> 测试提醒了一个合理点：单个 workflow 给出的弱相关标签，不应该被算高置信。我把 qrel confidence 的启发式调得更保守。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+2 -0)
+>
+> </details>
+>
+> 现在跑聚焦测试和新命令冒烟。
+>
+> 聚焦测试和小样本命令都过了。小样本 fuzzy 多解评估已经显示 `nDCG@10=0.707`，这和 exact scene recall 的悲观结果不是一回事；现在我跑 60 case，看多解评估是否更稳定。
+>
+> 60 case fuzzy 多解评估跑完：exact scene@10 还是 0.593，但 graded 多解 `nDCG@10=0.642`。这说明“多解评估”确实改变了我们对质量的判断，不过 qrels 仍是 bootstrap，需要人工/LLM 审核提升可信度。现在跑全量测试。
+>
+> <details><summary>Searched web 4 times</summary>
+>
+> <details><summary>Searched web 4 times</summary>
+>
+> - Searched web for `https://trec.nist.gov/`
+> - Searched web for `'Reranking is a search optimization technique' in https://docs.pinecone.io/guides/search/rerank-results`
+> - Searched web for `Don't Use LLMs to Make Relevance Judgments paper arxiv`
+> - Searched web for `https://arxiv.org/abs/2409.15133`
+>
+> </details>
+>
+> </details>
+>
+> 我查到的最佳实践支持这个路线，但也有一个重要提醒：LLM 可用于抽查/辅助，不应直接替代人类 qrels。所以这轮实现里 LLM rerank 是显式 sample 开关，qrels audit 会单独报告 manual/LLM 数量和置信度。现在跑命令和测试。
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先把“这是不是主流最佳实践”这件事用外部资料校准一下，然后回到仓库里确认实现状态和跑全量测试。你这个方向不是“差”，更像是已经过了原型期，开始进入评测可信度和排序上限的硬阶段。
+>
+> <details><summary>Searched web 10 times</summary>
+>
+> <details><summary>Searched web 10 times</summary>
+>
+> - Searched web for `TREC relevance judgments qrels graded relevance nDCG information retrieval evaluation NIST`
+> - Searched web for `site:trec.nist.gov qrels relevance judgments pooling TREC overview`
+> - Searched web for `Azure AI Search reciprocal rank fusion RRF hybrid search semantic ranking documentation`
+> - Searched web for `Microsoft Azure AI Search RRF reciprocal rank fusion hybrid search docs`
+> - Searched web for `learn.microsoft.com azure search hybrid search ranking RRF semantic ranker`
+> - Searched web for `https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking`
+> - Searched web for `RAG evaluation relevance judgments LLM as a judge human annotation best practices retrieval qrels`
+> - Searched web for `https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/`
+> - Searched web for `https://trec.nist.gov/data/qrels_eng/`
+> - Searched web for `HyDE hypothetical document embeddings retrieval paper arxiv`
+>
+> </details>
+>
+> </details>
+>
+> 外部资料的方向已经比较清楚：TREC/qrels、BEIR/nDCG、多路召回+RRF、二阶段 rerank、LLM judge 只做辅助而不是无审计替代，基本都支持你现在要补的这层。接下来我看本地代码，确认哪些已经落地，哪些还差最后收口。
+>
+> 仓库里已经有这一轮新增的命令和测试痕迹了，包括 qrels audit、fuzzy 多解评估、强 reranker baseline、LLM rerank 抽样入口。我现在重点做两件事：跑全量测试确认没有暗伤，再跑一组代表性实验把结果讲清楚。
+>
+> 代码看起来已经把主干接进去了：CLI 参数、报告写出、bootstrap qrels 的 confidence/votes、以及 LLM rerank 的显式抽样都在。接下来我直接跑测试和几个实验，不用再补大块设计。
+>
+> 全量测试通过：132 passed。qrels 审计也给了一个很有用的警告：现在的 qrels 是 bootstrap 自动池化，不是人工/LLM 审过的金标，所以它能指导迭代，但不能被当作最终裁判。
+>
+> <details><summary>Searched web 3 times</summary>
+>
+> <details><summary>Searched web 3 times</summary>
+>
+> - Searched web for `https://trec.nist.gov/data/qrels_eng/`
+> - Searched web for `'Reciprocal Rank Fusion' in https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking`
+> - Searched web for `'The main program' in https://github.com/usnistgov/trec_eval`
+>
+> </details>
+>
+> </details>
+</details>
+
+不是“这么差”。更准确地说：之前的 `6.5/10` 是按“能不能可信指导策略迭代”打的严苛分，不是说项目烂。现在这轮补完后，我会把实验平台可信度调到 **7/10 左右**：方向对、infra 更完整了，但还缺人工/LLM 审过的高置信 qrels。
+
+**检索结论**
+我查了资料，这条路是主流路线：
+
+- TREC/NIST 长期用 qrels 做检索评测，qrels 是标准相关性判断格式；trec_eval 也是 TREC 社区标准评测工具，并支持 nDCG 等指标。参考：[NIST qrels](https://trec.nist.gov/data/qrels_eng/)、[trec_eval](https://github.com/usnistgov/trec_eval)。
+- BEIR 强调跨任务、异质数据集、nDCG@10，并指出 BM25 是稳健 baseline，rerank/late-interaction 往往效果更好但成本更高。参考：[BEIR paper](https://arxiv.org/abs/2104.08663)。
+- Azure AI Search 文档明确把 BM25/vector 多路结果用 RRF 融合，并提供 debug/subscore 思路。参考：[Azure RRF hybrid ranking](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking)。
+- Pinecone 把 rerank 描述为二阶段检索里最简单的质量提升方法之一。参考：[Pinecone rerank](https://docs.pinecone.io/guides/search/rerank-results)。
+
+所以：**标注可信度 + reranker 实验 + fuzzy 多解评估**不是偏门方案，是很标准的检索/RAG 评测成熟化路线。
+
+**开发/优化**
+已在 `mocktesting` 实验平台里补上：
+
+- qrels 可信度审计：`audit-qrels`
+- fuzzy 多解评估：`evaluate-fuzzy-multirelevance`
+- strong baseline / oracle rerank 对比：`compare-strong-baselines`
+- LLM rerank 小样本入口：默认关闭，只有 `--llm-rerank-sample-size` 显式开启才会调用
+- pooled qrels 增加 `grade_votes` 和 `confidence`
+- 报告支持 nDCG、ERR、MRR、Judged、Unjudged、Recall
+
+核心位置：
+- [mock_retriever.py](./src/mocktesting/mock_retriever.py:495)
+- [mock_retriever.py](./src/mocktesting/mock_retriever.py:1758)
+- [mock_retriever.py](./src/mocktesting/mock_retriever.py:1882)
+- [test_mock_embedding_retriever.py](./tests/test_mock_embedding_retriever.py:319)
+
+**实验**
+我跑了三组：
+
+```powershell
+pytest -q --basetemp .pytest-tmp\trust-rerank-full-final -p no:cacheprovider
+python -m mocktesting.mock_retriever audit-qrels --qrels .tmp\pooled_qrels_test60.jsonl
+python -m mocktesting.mock_retriever evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --pool-depth 20
+python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_test60.jsonl
+```
+
+**评估**
+结果：
+
+- 测试：`132 passed`
+- qrels 审计：
+  - `qrels_count = 1232`
+  - `mean_confidence = 0.674188`
+  - `low_confidence_count = 362`
+  - `manual_or_llm_count = 0`
+- fuzzy 多解评估：
+  - `nDCG@10 = 0.642162`
+  - `MRR@10 = 0.871444`
+  - `scene_level_recall_at_10 = 0.593333`
+  - `stage_level_hit_at_3 = 0.913333`
+  - `purpose_level_hit_at_3 = 0.913333`
+  - `style_violation_at_3 = 0.06`
+- rerank 上限：
+  - baseline `hybrid_rrf_constraints` 的 `nDCG@10 = 0.435796`
+  - `qrels_oracle_rerank@20` 的 `nDCG@10 = 0.744706`
+  - 提升空间：`+0.30891`
+
+**分析结果**
+最重要的结论是：现在的问题已经不是“召回完全不行”，而是 **top20 内怎么重排**。
+
+`qrels_oracle_rerank@20` 能把 nDCG@10 从 `0.4358` 拉到 `0.7447`，说明候选池里经常已经有好结果，只是当前排序没把它们稳定顶上来。下一轮最值得做的不是继续堆 query planner 规则，而是做一个更强的 reranker 对照：小样本 LLM judge、规则 reranker、后续可插入 cross-encoder/late-interaction reranker。
+
+同时，qrels 审计提醒我们：现在 `manual_or_llm_count = 0`，所以这些 qrels 还只是 bootstrap 自动标注，能做研发导航，但不能当最终金标。
+
+**下一阶段**
+我建议下一步做三件事：
+
+1. 用 `sample-active-qrels` 抽低置信、排序分歧、near-miss 样本，人工或 LLM 小样本审一批高置信 qrels。
+2. 显式跑 `--llm-rerank-sample-size 10/30`，验证 LLM rerank 是否接近 oracle rerank 上限。
+3. 把失败样本分成“query 理解失败 / 候选召回失败 / rerank 失败 / qrels 不可信”，避免盲目调权重。
+
+这轮不是让检索质量立刻飞升，而是把“我们到底该信哪个实验结果”这件事往前推了一大步。
+
+> 好的，继续按照飞轮来走，首先先查阅一下资料看看目前的路是不是走对了，下一阶段的路可以怎么走
+
+<details><summary>2 previous messages</summary>
+
+> 我先把这一步当成“路线校准”：不急着写代码，先用论文和企业文档确认我们现在的飞轮是不是主流方向，以及下一轮最值得补哪一环。
+>
+> <details><summary>Searched web 11 times</summary>
+>
+> <details><summary>Searched web 11 times</summary>
+>
+> - Searched web for `TREC relevance judgments qrels pooling graded relevance nDCG evaluation NIST`
+> - Searched web for `site:learn.microsoft.com/en-us/azure/search hybrid search ranking reciprocal rank fusion RRF`
+> - Searched web for `https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking`
+> - Searched web for `'Reranking models' in https://docs.pinecone.io/guides/search/rerank-results`
+> - Searched web for `https://trec.nist.gov/data/qrels_eng/`
+> - Searched web for `site:trec.nist.gov pooling relevance judgments TREC overview qrels pooled runs`
+> - Searched web for `https://trec.nist.gov/overview.html`
+> - Searched web for `https://arxiv.org/abs/2104.08663`
+> - Searched web for `HyDE precise zero-shot dense retrieval arxiv hypothetical document embeddings`
+> - Searched web for `https://arxiv.org/abs/2411.08275`
+> - Searched web for `information retrieval evaluation active learning qrels sample judgments active assessment paper`
+>
+> </details>
+>
+> </details>
+</details>
+
+结论：**路是走对的，而且下一阶段应该继续沿着这条飞轮走**。不是“分数差所以重做”，而是已经进入检索系统最正常也最难的阶段：从“单目标命中”转向“可信标注、多解评估、reranker 上限验证”。
+
+**资料校准**
+TREC/NIST 的检索评测传统就是：系统提交 top-ranked results，NIST 做 pooling、judging，再用 qrels 评估。这和我们现在的 pooled qrels / audit qrels 是同一条路。参考：[TREC Overview](https://trec.nist.gov/overview.html)、[NIST qrels format](https://trec.nist.gov/data/qrels_eng/)。
+
+BEIR 也说明：只在窄评测上看 embedding 排名很容易高估泛化；BM25 是稳健 baseline，reranking / late-interaction 通常效果最好，但成本更高。这正对应我们现在看到的现象：召回池还可以，top20 rerank 空间很大。参考：[BEIR paper](https://arxiv.org/abs/2104.08663)。
+
+企业搜索也基本是：BM25/vector 多路召回，RRF 或加权融合，再做 semantic rerank。Azure AI Search 文档明确说 RRF 用于 hybrid/vector 多路融合，semantic ranker 是对 BM25/RRF 结果做二级重排。参考：[Azure RRF](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking)、[Azure semantic ranker](https://learn.microsoft.com/en-us/azure/search/semantic-search-overview)。
+
+Pinecone 文档也把 rerank 定义为二阶段检索中提升质量的常用方法：先召回一批，再让 reranker 按 query-candidate 相关性重排。参考：[Pinecone rerank](https://docs.pinecone.io/guides/search/rerank-results)。
+
+LLM 做 relevance judgment 也不是乱来。TREC 2024 RAG Track 相关研究显示，LLM 自动相关性判断在 run-level 排名上可以和人工判断高度相关，但仍要记录来源、置信度和审计差异。参考：[LLM relevance assessments, TREC 2024 RAG Track](https://arxiv.org/abs/2411.08275)。
+
+**对我们当前路线的判断**
+目前路线应该继续：
+
+1. `bootstrap qrels` 不能当最终真理，但非常适合作为第一轮实验导航。
+2. `fuzzy 多解评估` 是必要的，因为“高级但别端着 / 先让观众进入现场”本来就不是单一 scene target。
+3. `oracle rerank@20` 已经证明 top20 里有明显上限，所以下一阶段核心不是继续堆召回，而是验证真实 reranker 能不能接近 oracle。
+4. `LLM judge/rerank` 可以用，但要作为小样本审计和对照，不能默认全量，也不能静默替代人工/规则 gold qrels。
+
+**下一阶段飞轮**
+我建议下一轮按这个节奏走：
+
+1. **开发**
+   - 增强 qrels 审计：记录 `judge_type`、`judge_version`、`confidence`、`conflict_reason`、`needs_adjudication`。
+   - 增加 `qrels-adjudication-queue`：自动挑 low confidence、workflow disagreement、target miss、style violation 样本。
+   - 增加真实 reranker 实验接口：`rule`、`llm_sample`、后续可插 `bge-reranker` / DashScope rerank。
+   - 加 gated rerank cost report：只对低 margin、模糊 query、风格负例、planner 分歧样本 rerank。
+
+2. **优化**
+   - 不再盲目扩大词元或 embedding 通道。
+   - 优先优化 top20 rerank 文本：每张 card 给 reranker 一个短、结构化、稳定的 candidate summary。
+   - 对 fuzzy query 用 graded qrels 作为主指标，exact scene recall 退为辅助指标。
+
+3. **实验**
+   - `rule baseline`
+   - `hybrid_rrf_constraints`
+   - `signature/adaptive`
+   - `qrels_oracle_rerank@20`
+   - `llm_rerank_sample@20`
+   - `gated_llm_rerank_sample@20`
+
+4. **评估**
+   - 主指标：`nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`
+   - 辅指标：`scene_recall@10`、`stage_hit@3`、`purpose_hit@3`、`style_violation@3`
+   - 可信度指标：`manual_or_llm_qrels_count`、`low_confidence_qrels_count`、`conflict_rate`
+
+5. **分析结果**
+   - 如果 oracle 很高、真实 rerank 也高：进入 gated rerank 策略。
+   - 如果 oracle 高、真实 rerank 低：candidate summary 或 judge prompt 不够好。
+   - 如果 oracle 也低：召回池不足，回到 query understanding / index schema。
+   - 如果 qrels conflict 高：先补标注规范，不继续调模型。
+
+我的判断：下一阶段不该“再加更多复杂召回”，而是先把 **高置信 qrels + 小样本真实 rerank + fuzzy graded evaluation** 做扎实。这是最像企业搜索团队会走的路线，也是现在最能让实验平台从“有很多报告”变成“能可靠指导下一轮策略”的路线。
+
+> 继续
+
+<details><summary>1 previous message</summary>
+
+> Plan
+>
+> # SceneWeaver 检索飞轮下一阶段计划：可信标注 + 真实 Rerank 上限验证
+>
+> ## Summary
+>
+> 下一阶段不继续堆召回复杂度，而是把实验飞轮补到更可信：**候选池评估 → 主动抽样标注 → qrels 审计 → reranker 对照 → fuzzy 多解 graded 评估 → 失败归因**。这条路线与 TREC/qrels、BEIR/nDCG、Azure hybrid+RRF+semantic ranker、Pinecone two-stage rerank 的主流实践一致。
+>
+> 本轮目标：
+>
+> - 把 bootstrap qrels 从“自动参考集”升级成“可审计、可补标、可对比”的实验资产。
+> - 验证真实 reranker 是否能接近当前 `qrels_oracle_rerank@20` 的上限。
+> - 对 fuzzy query 不再只看 exact scene recall，改用 graded qrels + nDCG/ERR/MRR 做主评估。
+> - LLM 默认关闭，只在显式 sample 参数下用于标注/重排抽查。
+>
+> ## Key Changes
+>
+> ### 1. 标注可信度 Infra
+>
+> - 扩展 qrels 兼容 schema，不破坏旧 JSONL：
+>   - 保留 `query_id, item_id, grade, reason, source, confidence, grade_votes`。
+>   - `grade_votes[]` 增加可选字段：`judge_type=bootstrap|human|llm`、`judge_id`、`judge_version`、`confidence`、`created_at`。
+>   - `audit-qrels` 新增统计：`manual_count`、`llm_count`、`bootstrap_only_count`、`needs_adjudication_count`、`vote_conflict_rate`。
+> - 增强现有 `sample-active-qrels`：
+>   - 输出更适合人工/LLM 审核的 JSONL 队列。
+>   - 每条包含 query、top candidates、target、workflow disagreement、low confidence reason、建议标注粒度。
+> - 新增命令 `merge-adjudicated-qrels`：
+>   - 输入人工/LLM 审核 JSONL。
+>   - 合并到 qrels 文件，保留旧 votes，并重新计算 top-level `grade/confidence/source`。
+>   - 冲突不覆盖，标记为 `needs_adjudication`。
+>
+> ### 2. Reranker 实验平台
+>
+> - 扩展现有 `compare-strong-baselines`：
+>   - 保留 `rule_rerank@N`、`qrels_oracle_rerank@N`。
+>   - 新增 `llm_rerank_sample@N`，仅 `--llm-rerank-sample-size > 0` 时启用。
+>   - 报告记录 `llm_call_count`、`fallback_count`、`avg_candidates_per_call`、`estimated_tokens_or_payload_chars`。
+> - 新增 `compare-rerank-upper-bound`：
+>   - 固定比较 baseline、rule rerank、oracle rerank、LLM sample rerank。
+>   - 输出“召回问题还是重排问题”的判断：
+>     - oracle 高、LLM 高：值得进 gated rerank。
+>     - oracle 高、LLM 低：candidate summary/prompt/reranker 不够。
+>     - oracle 低：回到召回/query understanding。
+> - Reranker candidate summary 固定结构：
+>   - `item_id`
+>   - `script_stage`
+>   - `creative_purpose`
+>   - `script_usecase`
+>   - `scene_signature`
+>   - `style_traits/style_risks`
+>   - `constraint_hits`
+>   - 不传长 `lexical_text`，避免 token 与速度失控。
+>
+> ### 3. Fuzzy 多解评估升级
+>
+> - 扩展 `evaluate-fuzzy-multirelevance`：
+>   - 主指标固定为 `nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`。
+>   - 辅助指标保留 `scene_level_recall_at_10`、`stage_hit_at_3`、`purpose_hit_at_3`、`style_violation_at_3`。
+>   - 报告按 variant type 分组：`implicit_stage`、`fuzzy_style`、`underspecified_tone`、`negative_style`、`director_brief`。
+> - 当 qrels 缺失时允许 bootstrap，但报告必须明确 `qrels_source=bootstrap_from_fuzzy_pool`，并降低可信等级。
+> - 增加 `qrels_trust_level`：
+>   - `low`: bootstrap-only。
+>   - `medium`: 有 LLM/human sample，但覆盖不足。
+>   - `high`: 关键失败样本已审过，冲突率低。
+>
+> ### 4. 报告与飞轮脚本
+>
+> - `generate-eval-report` 支持新报告类型：
+>   - qrels audit
+>   - rerank upper bound
+>   - fuzzy multirelevance
+>   - adjudication queue summary
+> - 新增推荐飞轮命令顺序文档/帮助文本：
+>   1. `build-pooled-qrels`
+>   2. `audit-qrels`
+>   3. `sample-active-qrels`
+>   4. `merge-adjudicated-qrels`
+>   5. `evaluate-fuzzy-multirelevance`
+>   6. `compare-strong-baselines`
+>   7. `compare-rerank-upper-bound`
+>   8. `analyze-failures`
+>
+> ## Experiments
+>
+> 第一轮默认不调用 LLM：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever build-pooled-qrels --split test --limit 60 --qrels-output .tmp\pooled_qrels_next.jsonl
+> python -m mocktesting.mock_retriever audit-qrels --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\qrels_audit_next.json --markdown-output .tmp\qrels_audit_next.md
+> python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\active_qrels_next.jsonl
+> python -m mocktesting.mock_retriever evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\fuzzy_multi_next.json --markdown-output .tmp\fuzzy_multi_next.md
+> python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\strong_baselines_next.json --markdown-output .tmp\strong_baselines_next.md
+> ```
+>
+> 第二轮小样本 LLM，只显式开启：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_next.jsonl --llm-rerank-sample-size 10 --rerank-depth 20 --output .tmp\strong_baselines_llm10.json
+> ```
+>
+> 成功标准：
+>
+> - qrels 审计报告能明确指出 bootstrap-only、低置信、冲突样本数量。
+> - fuzzy 多解评估稳定输出 graded 指标，并按 variant type 分组。
+> - oracle rerank 与真实 sample rerank 差距可被量化。
+> - 默认命令不调用真实 LLM。
+> - 实验报告能判断主要瓶颈是召回、重排、标注可信度，还是 fuzzy 多解标签不足。
+>
+> ## Test Plan
+>
+> - 单元测试：
+>   - qrels vote 合并、confidence 重算、冲突检测。
+>   - `merge-adjudicated-qrels` 不破坏旧 qrels 格式。
+>   - active qrels sampler 优先抽 low confidence、workflow disagreement、target miss。
+>   - reranker candidate summary 不包含长 debug text。
+>   - LLM rerank sample size 为 0 时不调用 client。
+> - 集成测试：
+>   - `audit-qrels`、`sample-active-qrels`、`merge-adjudicated-qrels`、`evaluate-fuzzy-multirelevance`、`compare-strong-baselines` 串起来能跑通。
+>   - bootstrap qrels 与 adjudicated qrels 的报告差异可见。
+>   - fake LLM client 验证 rerank 结果解析与 fallback。
+> - 回归测试：
+>   - 现有 `pytest --basetemp .pytest-tmp/<name> -p no:cacheprovider` 全量通过。
+>   - 现有 hard negative/style negative 指标不回退。
+>   - 现有默认 CLI 行为兼容。
+>
+> ## Assumptions
+>
+> - 本轮仍只改 `src/mocktesting` 实验链路，不收敛到正式 retrieval。
+> - 不引入外部向量数据库，不训练模型。
+> - LLM 只用于显式 sample 标注/重排，不进入默认路径。
+> - qrels 中人工/LLM 审核结果优先级高于 bootstrap，但冲突样本必须保留 votes，不静默覆盖。
+> - 当前最重要的优化方向是验证 top20 rerank 能力，而不是继续扩大词元、通道或候选池。
+</details>
+
+我会把“继续”理解成：把刚才确认过的路线落成下一轮可执行计划，但现在仍处在计划模式，我先做一次只读检查，确认当前实验平台已经有哪些入口，避免计划重复造轮子。
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # SceneWeaver 检索飞轮下一阶段计划：可信标注 + 真实 Rerank 上限验证
+>
+> ## Summary
+>
+> 下一阶段不继续堆召回复杂度，而是把实验飞轮补到更可信：**候选池评估 → 主动抽样标注 → qrels 审计 → reranker 对照 → fuzzy 多解 graded 评估 → 失败归因**。这条路线与 TREC/qrels、BEIR/nDCG、Azure hybrid+RRF+semantic ranker、Pinecone two-stage rerank 的主流实践一致。
+>
+> 本轮目标：
+>
+> - 把 bootstrap qrels 从“自动参考集”升级成“可审计、可补标、可对比”的实验资产。
+> - 验证真实 reranker 是否能接近当前 `qrels_oracle_rerank@20` 的上限。
+> - 对 fuzzy query 不再只看 exact scene recall，改用 graded qrels + nDCG/ERR/MRR 做主评估。
+> - LLM 默认关闭，只在显式 sample 参数下用于标注/重排抽查。
+>
+> ## Key Changes
+>
+> ### 1. 标注可信度 Infra
+>
+> - 扩展 qrels 兼容 schema，不破坏旧 JSONL：
+>   - 保留 `query_id, item_id, grade, reason, source, confidence, grade_votes`。
+>   - `grade_votes[]` 增加可选字段：`judge_type=bootstrap|human|llm`、`judge_id`、`judge_version`、`confidence`、`created_at`。
+>   - `audit-qrels` 新增统计：`manual_count`、`llm_count`、`bootstrap_only_count`、`needs_adjudication_count`、`vote_conflict_rate`。
+> - 增强现有 `sample-active-qrels`：
+>   - 输出更适合人工/LLM 审核的 JSONL 队列。
+>   - 每条包含 query、top candidates、target、workflow disagreement、low confidence reason、建议标注粒度。
+> - 新增命令 `merge-adjudicated-qrels`：
+>   - 输入人工/LLM 审核 JSONL。
+>   - 合并到 qrels 文件，保留旧 votes，并重新计算 top-level `grade/confidence/source`。
+>   - 冲突不覆盖，标记为 `needs_adjudication`。
+>
+> ### 2. Reranker 实验平台
+>
+> - 扩展现有 `compare-strong-baselines`：
+>   - 保留 `rule_rerank@N`、`qrels_oracle_rerank@N`。
+>   - 新增 `llm_rerank_sample@N`，仅 `--llm-rerank-sample-size > 0` 时启用。
+>   - 报告记录 `llm_call_count`、`fallback_count`、`avg_candidates_per_call`、`estimated_tokens_or_payload_chars`。
+> - 新增 `compare-rerank-upper-bound`：
+>   - 固定比较 baseline、rule rerank、oracle rerank、LLM sample rerank。
+>   - 输出“召回问题还是重排问题”的判断：
+>     - oracle 高、LLM 高：值得进 gated rerank。
+>     - oracle 高、LLM 低：candidate summary/prompt/reranker 不够。
+>     - oracle 低：回到召回/query understanding。
+> - Reranker candidate summary 固定结构：
+>   - `item_id`
+>   - `script_stage`
+>   - `creative_purpose`
+>   - `script_usecase`
+>   - `scene_signature`
+>   - `style_traits/style_risks`
+>   - `constraint_hits`
+>   - 不传长 `lexical_text`，避免 token 与速度失控。
+>
+> ### 3. Fuzzy 多解评估升级
+>
+> - 扩展 `evaluate-fuzzy-multirelevance`：
+>   - 主指标固定为 `nDCG@3/10`、`ERR@10`、`MRR@10`、`Judged@10`。
+>   - 辅助指标保留 `scene_level_recall_at_10`、`stage_hit_at_3`、`purpose_hit_at_3`、`style_violation_at_3`。
+>   - 报告按 variant type 分组：`implicit_stage`、`fuzzy_style`、`underspecified_tone`、`negative_style`、`director_brief`。
+> - 当 qrels 缺失时允许 bootstrap，但报告必须明确 `qrels_source=bootstrap_from_fuzzy_pool`，并降低可信等级。
+> - 增加 `qrels_trust_level`：
+>   - `low`: bootstrap-only。
+>   - `medium`: 有 LLM/human sample，但覆盖不足。
+>   - `high`: 关键失败样本已审过，冲突率低。
+>
+> ### 4. 报告与飞轮脚本
+>
+> - `generate-eval-report` 支持新报告类型：
+>   - qrels audit
+>   - rerank upper bound
+>   - fuzzy multirelevance
+>   - adjudication queue summary
+> - 新增推荐飞轮命令顺序文档/帮助文本：
+>   1. `build-pooled-qrels`
+>   2. `audit-qrels`
+>   3. `sample-active-qrels`
+>   4. `merge-adjudicated-qrels`
+>   5. `evaluate-fuzzy-multirelevance`
+>   6. `compare-strong-baselines`
+>   7. `compare-rerank-upper-bound`
+>   8. `analyze-failures`
+>
+> ## Experiments
+>
+> 第一轮默认不调用 LLM：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever build-pooled-qrels --split test --limit 60 --qrels-output .tmp\pooled_qrels_next.jsonl
+> python -m mocktesting.mock_retriever audit-qrels --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\qrels_audit_next.json --markdown-output .tmp\qrels_audit_next.md
+> python -m mocktesting.mock_retriever sample-active-qrels --split test --limit 60 --sample-size 80 --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\active_qrels_next.jsonl
+> python -m mocktesting.mock_retriever evaluate-fuzzy-multirelevance --split test --limit 60 --query-planner multi_query --ranking-key hybrid_rrf_constraints --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\fuzzy_multi_next.json --markdown-output .tmp\fuzzy_multi_next.md
+> python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_next.jsonl --output .tmp\strong_baselines_next.json --markdown-output .tmp\strong_baselines_next.md
+> ```
+>
+> 第二轮小样本 LLM，只显式开启：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever compare-strong-baselines --split test --limit 60 --qrels .tmp\pooled_qrels_next.jsonl --llm-rerank-sample-size 10 --rerank-depth 20 --output .tmp\strong_baselines_llm10.json
+> ```
+>
+> 成功标准：
+>
+> - qrels 审计报告能明确指出 bootstrap-only、低置信、冲突样本数量。
+> - fuzzy 多解评估稳定输出 graded 指标，并按 variant type 分组。
+> - oracle rerank 与真实 sample rerank 差距可被量化。
+> - 默认命令不调用真实 LLM。
+> - 实验报告能判断主要瓶颈是召回、重排、标注可信度，还是 fuzzy 多解标签不足。
+>
+> ## Test Plan
+>
+> - 单元测试：
+>   - qrels vote 合并、confidence 重算、冲突检测。
+>   - `merge-adjudicated-qrels` 不破坏旧 qrels 格式。
+>   - active qrels sampler 优先抽 low confidence、workflow disagreement、target miss。
+>   - reranker candidate summary 不包含长 debug text。
+>   - LLM rerank sample size 为 0 时不调用 client。
+> - 集成测试：
+>   - `audit-qrels`、`sample-active-qrels`、`merge-adjudicated-qrels`、`evaluate-fuzzy-multirelevance`、`compare-strong-baselines` 串起来能跑通。
+>   - bootstrap qrels 与 adjudicated qrels 的报告差异可见。
+>   - fake LLM client 验证 rerank 结果解析与 fallback。
+> - 回归测试：
+>   - 现有 `pytest --basetemp .pytest-tmp/<name> -p no:cacheprovider` 全量通过。
+>   - 现有 hard negative/style negative 指标不回退。
+>   - 现有默认 CLI 行为兼容。
+>
+> ## Assumptions
+>
+> - 本轮仍只改 `src/mocktesting` 实验链路，不收敛到正式 retrieval。
+> - 不引入外部向量数据库，不训练模型。
+> - LLM 只用于显式 sample 标注/重排，不进入默认路径。
+> - qrels 中人工/LLM 审核结果优先级高于 bootstrap，但冲突样本必须保留 votes，不静默覆盖。
+> - 当前最重要的优化方向是验证 top20 rerank 能力，而不是继续扩大词元、通道或候选池。
+
+<details><summary>73 previous messages</summary>
+
+> 我来继续把这个飞轮计划落进 `mocktesting`。我会先读当前实现的关键函数，尽量复用已有 qrels、rerank、fuzzy 评估代码，只补缺的接口和可信度字段。
+>
+> 当前代码已经有 pooled qrels、active sampler、fuzzy multi、strong baseline 的骨架，所以这轮我会做“增量补全”：补 adjudication 合并、qrels trust 统计、rerank upper bound 命令，以及让 LLM rerank payload 固定成短 candidate summary。
+>
+> 我准备开始改代码了：先加新的 CLI 入口和默认输出路径，然后补 qrels 合并/审计的核心函数，最后把 reranker 的 payload 收窄成固定摘要。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+4 -0)
+>
+> </details>
+>
+> 默认路径已加好。下一步我把 `merge-adjudicated-qrels`、`compare-rerank-upper-bound` 和飞轮指南入口接进 argparse 与命令分发。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+30 -0)
+>
+> </details>
+>
+> CLI 入口已经挂上；我继续接分发逻辑，保证这些命令能写 JSON/Markdown，并且默认不会触发 LLM。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+16 -0)
+>
+> </details>
+>
+> 现在补核心数据逻辑：qrels 的 trust level、人工/LLM vote 合并、冲突保留，以及 active queue 里给审核者看的上下文。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+40 -0)
+>
+> </details>
+>
+> 我把合并命令的外壳加好了；接下来补它依赖的 qrels vote 规范化和 recompute 逻辑，同时保持旧 JSONL 可读。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+22 -2)
+>
+> </details>
+>
+> bootstrap vote 现在会带 `judge_type=bootstrap`，这样后续 audit 能清楚地区分自动池化、人工和 LLM 来源。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+22 -4)
+>
+> </details>
+>
+> audit 统计已经扩展：之后能直接看到 manual/LLM 覆盖、bootstrap-only、需要仲裁样本和 trust level。现在补这些统计背后的判定函数。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+210 -0)
+>
+> </details>
+>
+> qrels 合并逻辑已补：人工/LLM vote 会保留在 `grade_votes` 里，冲突会标记 `needs_adjudication`，不会把旧判断无痕覆盖。下面增强主动标注队列的样本上下文。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+61 -0)
+>
+> </details>
+>
+> 主动标注队列现在会带 target、candidate summary、top candidates、建议标注粒度和低置信原因。下一步把 LLM rerank payload 固定为短结构化摘要，并在报告里记录调用成本信号。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+48 -20)
+>
+> </details>
+>
+> LLM rerank 现在只会看到短 candidate summary，不会收到长 metadata/debug 文本。接下来加 upper-bound 对比命令，用来直接回答“是召回问题还是重排问题”。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+64 -0)
+>
+> </details>
+>
+> upper-bound 命令已接好。现在我给 fuzzy 多解评估补 `qrels_trust_level`，这样报告会直接标出当前结果是 bootstrap-only 还是有审过的 qrels 支撑。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+3 -0)
+>
+> </details>
+>
+> 我也会把 strong baseline 的 qrels trust 和 LLM sample 成本信号放进 summary，方便一眼判断结果可信度和调用开销。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+2 -0)
+>
+> </details>
+>
+> 接下来加一个轻量的飞轮指南输出，避免每次都靠记命令顺序；它只是 CLI 帮助/JSON，不影响实验结果。
+>
+> 飞轮指南函数会放在实验比较命令附近，保持这些“报告/流程”工具集中。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+62 -0)
+>
+> </details>
+>
+> 我顺手增强 Markdown 里的 variant 表，让 fuzzy 多解报告直接展示 graded 指标，而不只是 scene/stage/purpose。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+6 -2)
+>
+> </details>
+>
+> Markdown 已补 graded variant 指标。我注意到 upper-bound 包装命令不需要重新造 experiment metadata，避免时间戳计算绕弯，我会把它改成复用 baseline 报告的 metadata。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+2 -1)
+>
+> </details>
+>
+> 核心实现基本补完了。现在我会加几条单元测试，覆盖 qrels 合并、reranker payload 不带长文本、active queue 增强字段，以及 trust level。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+4 -0)
+>
+> </details>
+>
+> 测试导入已更新；我把新增用例放在现有 qrels/active sampler 测试附近，保持阅读顺序和检索飞轮一致。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+38 -0)
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+7 -0)
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+32 -0)
+>
+> </details>
+>
+> 测试用例已覆盖新增关键点。现在我把 qrels trust 也顺手放进 pooled/evaluate 报告，保证所有 graded 评估报告口径一致。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+2 -0)
+>
+> </details>
+>
+> 实现已完成一版。我先跑相关测试，重点看新增 qrels/rerank/fuzzy 逻辑有没有破坏旧行为。
+>
+> 目标测试通过：55 passed。接下来我跑几个小规模 CLI smoke，确保新入口不是只在单元函数里可用。
+>
+> 三个 CLI smoke 都跑通了，并且 fuzzy 报告已经显示 `qrels_trust_level=low`，这正是 bootstrap-only 时应该给出的保守信号。我再用一个小 adjudication 文件验证合并命令。
+>
+> 临时 adjudication 输入已准备好；我现在跑合并命令确认它能输出审计摘要。
+>
+> 这个 smoke 抓到一个真实的 Windows 小坑：PowerShell `Set-Content -Encoding UTF8` 可能写 BOM，当前 JSONL 读取没兼容。这个值得修，尤其用户环境就是 Windows。
+>
+> 补丁定位偏了，我重新定位两个读取函数再改。
+>
+> 定位到了，直接做精确替换。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+1 -1)
+>
+> </details>
+>
+> adjudication 读取已兼容 BOM。我再找 qrels 读取函数，避免同类问题。
+>
+> 只剩 `load_qrels` 本身，我打开附近确认。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+1 -1)
+>
+> </details>
+>
+> qrels/adjudication 两个 JSONL 读取都兼容 `utf-8-sig` 了。我重新跑 merge smoke。
+>
+> merge smoke 通过，输出里 manual_count、bootstrap_only_count、trust level 都符合预期。现在我跑全量测试，确保这轮没有影响其它模块。
+>
+> 全量测试通过：134 passed。接下来我按飞轮跑一组 60 case 的默认实验，不调用 LLM，确认新报告在真实规模下的输出。
+>
+> pooled qrels 已生成，trust level 是 `low`，这符合预期：它还是 bootstrap-only。继续跑 audit、active sample、fuzzy 多解和 upper-bound。
+>
+> 实验暴露了两个很有价值的问题：active sample 因为把 bootstrap qrels 也当成“已审过”而抽不到样本；fuzzy 多解拿普通 query 的 qrels 时 query_id 不匹配，graded 指标全 0。这两个都应该修，否则飞轮会卡住。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+9 -3)
+>
+> </details>
+>
+> active sampler 现在只把人工/LLM 且无需仲裁的 qrel 当作“已审过”；bootstrap-only 会继续进入审核队列。补一个紧凑 existing qrel 摘要。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+13 -0)
+>
+> </details>
+>
+> 接下来修 fuzzy graded qrels 覆盖问题：如果传入的 qrels 文件不覆盖 fuzzy variant 的 query_id，就自动补一层 fuzzy pool bootstrap，并在报告里明确标注，不伪装成纯 file qrels。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+7 -1)
+>
+> </details>
+>
+> fuzzy 会自动补 bootstrap 了；我补两个小工具函数：计算 qrels 覆盖率、合并 qrels 时优先保留人工/LLM 或更高置信判断。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+37 -0)
+>
+> </details>
+>
+> 这两个实验卡点已经修了。现在重跑目标测试，然后重跑刚才失败/异常的两个实验确认数值恢复正常。
+>
+> 修复有效：active queue 现在能抽样，fuzzy graded 指标也恢复为可读结果，并且报告明确是 `file_plus_bootstrap_for_unjudged_fuzzy_pool`。我再跑一次全量测试作为最终验证。
+>
+> 全量测试最终通过：134 passed。最后我看一下 diff 摘要，给你一个干净的开发/实验/评估收口。
+>
+> 我看到 diff 里包含前几轮已经积累的大改动，所以最终汇报会聚焦本轮新增的 qrels/rerank 飞轮内容。为了和计划一致，我再跑一次 `sample-active-qrels --sample-size 80` 拿完整样本数。
+>
+> 完整 active queue 现在能抽 80 条。为了更贴合“可信标注”目标，我再补一个小增强：已有 qrels 如果低置信或需要仲裁，也会成为抽样原因，而不只靠 workflow 排名分歧。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+6 -1)
+>
+> </details>
+>
+> 抽样原因已补低置信/需仲裁。再把这两个原因加入优先级权重和可读说明。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+6 -0)
+>
+> </details>
+>
+> 低置信 qrels 也会被主动抽样了。我跑一遍目标测试和 active sample，确认这个增强没有副作用。
+>
+> 这次 active queue 更有用了：80 条里全部都带 `needs_adjudication`，55 条低置信，确实在往“补标注可信度”的方向抽。我再跑最终全量测试。
+>
+> 最终全量测试通过。最后我抽看一下 active queue 的一条样本，确认人工审核需要的字段都在。
+</details>
+
+已按飞轮计划实现并验证完这一轮，主要改在 [mock_retriever.py](./src/mocktesting/mock_retriever.py:495) 和 [test_mock_embedding_retriever.py](./tests/test_mock_embedding_retriever.py:319)。
+
+**开发/优化**
+新增/增强了这些能力：
+
+- `merge-adjudicated-qrels`：把人工/LLM 审核结果合并回 qrels，保留旧 `grade_votes`，冲突标记 `needs_adjudication`。
+- `audit-qrels` 扩展：现在报告 `manual_count`、`llm_count`、`bootstrap_only_count`、`needs_adjudication_count`、`vote_conflict_rate`、`qrels_trust_level`。
+- `sample-active-qrels` 增强：不会再把 bootstrap qrels 当作“已人工审过”；会优先抽低置信、需仲裁、workflow 分歧、style risk 样本。
+- `compare-rerank-upper-bound`：固定比较 baseline / rule rerank / qrels oracle rerank / 可选 LLM sample rerank，并给出瓶颈判断。
+- `evaluate-fuzzy-multirelevance` 修复：如果传入 qrels 文件不覆盖 fuzzy variant，会自动补 fuzzy pool bootstrap，并明确标记 `qrels_source=file_plus_bootstrap_for_unjudged_fuzzy_pool`。
+- LLM rerank payload 收窄：只传固定 candidate summary，不传长 `lexical_text` / debug text。
+- JSONL 读取兼容 Windows BOM：`utf-8-sig`。
+
+**实验**
+我跑了默认不调用 LLM 的飞轮：
+
+- `build-pooled-qrels --limit 60`
+- `audit-qrels`
+- `sample-active-qrels --sample-size 80`
+- `evaluate-fuzzy-multirelevance --limit 60 --query-planner multi_query`
+- `compare-rerank-upper-bound --limit 60`
+
+**评估**
+关键结果：
+
+- qrels audit：
+  - `qrels_count = 1244`
+  - `bootstrap_only_count = 1244`
+  - `manual_count = 0`
+  - `llm_count = 0`
+  - `low_confidence_count = 148`
+  - `needs_adjudication_count = 310`
+  - `vote_conflict_rate = 0.135048`
+  - `qrels_trust_level = low`
+- active qrels：
+  - `sample_count = 80`
+  - 其中 `needs_adjudication = 80`，`low_confidence_qrel = 55`，`workflow_rank_disagreement = 26`
+- fuzzy 多解：
+  - `nDCG@10 = 0.642162`
+  - `MRR@10 = 0.871444`
+  - `scene_level_recall_at_10 = 0.593333`
+  - `stage_level_hit_at_3 = 0.913333`
+  - `purpose_level_hit_at_3 = 0.913333`
+  - `style_violation_at_3 = 0.06`
+- rerank upper bound：
+  - baseline `nDCG@10 = 0.435796`
+  - oracle rerank `nDCG@10 = 0.744706`
+  - opportunity `+0.30891`
+  - diagnosis: `rerank_opportunity_high_needs_real_reranker_sample`
+
+测试：`134 passed`。没有跑真实 LLM。
+
+**分析结果**
+这轮最大的收获不是“检索分数立刻变高”，而是飞轮终于能更诚实地暴露问题了：
+
+- 当前 qrels 仍是 bootstrap-only，所以可信度应保持 `low`。
+- top20 里存在很大的重排上限，说明下一步重点应是 reranker，而不是继续扩大召回复杂度。
+- fuzzy 多解评估现在不会因为 qrels query_id 不匹配而给出假 0 分。
+- active queue 已经能稳定抽出需要人工/LLM 审核的样本。
+
+**下一阶段展望**
+下一步最值得做：拿 `.tmp\active_qrels_next.jsonl` 做 30-80 条人工或 LLM 小样本 adjudication，然后跑：
+
+```powershell
+python -m mocktesting.mock_retriever merge-adjudicated-qrels --qrels .tmp\pooled_qrels_next.jsonl --adjudications .tmp\active_qrels_reviewed.jsonl --output .tmp\pooled_qrels_adjudicated.jsonl
+python -m mocktesting.mock_retriever compare-rerank-upper-bound --split test --limit 60 --qrels .tmp\pooled_qrels_adjudicated.jsonl --llm-rerank-sample-size 10
+```
+
+如果 LLM/sample rerank 能接近 oracle，就进入 gated rerank；如果差距大，优先改 candidate summary / rerank prompt。
+
+> 我认为你应该增加一个能力报告可视化图表，需要记录每一次cycle相比上一次，什么能力提升了，以便溯源，这需要加入cycle中。现在需要你新增这个infra，并以目前状况作为原点
+
+<details><summary>2 previous messages</summary>
+
+> 我先只读检查一下现有 report / experiment / flywheel 入口，确认最自然的接入点在哪里。这个需求很对：如果每轮只产一堆 JSON，后面会很难回答“到底是哪一轮让能力变好了”。
+>
+> Plan
+>
+> # SceneWeaver 能力飞轮可视化 Infra 计划
+>
+> ## Summary
+>
+> 新增一个“能力周期报告”层，把每一轮 retrieval cycle 的实验结果汇总成可追踪时间线：当前状态作为 `origin`，后续每轮记录与上一轮相比哪些能力提升、退化或无变化。默认输出 **Markdown + 内嵌 SVG 图表**，不新增运行时依赖，适合本地快速查看和版本化归档。
+>
+> 核心目标：
+>
+> - 每个 cycle 记录输入报告、git sha、配置、关键指标、能力分数、相对上一轮 delta。
+> - 支持生成趋势图、能力雷达/柱状图、delta 表、主要瓶颈和下一步建议。
+> - 加入现有 retrieval flywheel：每轮实验结束后执行一次 `record-capability-cycle` 和 `generate-capability-report`。
+> - 用当前 `.tmp` 中已有报告生成第一条 `origin` cycle。
+>
+> ## Key Changes
+>
+> ### 1. Capability Cycle Registry
+>
+> 在 `src/mocktesting/mock_retriever.py` 新增命令：
+>
+> - `record-capability-cycle`
+>   - 参数：
+>     - `--cycle-id`，默认 `origin_<YYYYMMDD_HHMMSS>`。
+>     - `--label`，默认空。
+>     - `--reports`，接收多个 JSON 报告路径。
+>     - `--registry`，默认 `.tmp\capability_cycles.jsonl`。
+>     - `--output`，默认 `.tmp\capability_cycle_latest.json`。
+>     - `--as-origin`，标记当前 cycle 为起点，不计算 previous delta。
+>   - 行为：
+>     - 读取 qrels audit、fuzzy multirelevance、rerank upper bound、active qrels sampler、failure analysis、workflow/report 等 JSON。
+>     - 抽取统一 capability metrics。
+>     - 计算 normalized capability scores。
+>     - 追加写入 registry JSONL，并输出本轮 cycle JSON。
+>
+> - `generate-capability-report`
+>   - 参数：
+>     - `--registry`，默认 `.tmp\capability_cycles.jsonl`。
+>     - `--output`，默认 `.tmp\capability_report.md`。
+>     - `--chart-dir`，默认 `.tmp\capability_charts`。
+>   - 行为：
+>     - 读取 registry。
+>     - 生成 Markdown 报告。
+>     - 生成并引用本地 SVG 图表。
+>     - 展示 origin、latest、previous delta、趋势和瓶颈判断。
+>
+> ### 2. Capability Schema
+>
+> 每条 cycle JSON 使用稳定结构：
+>
+> - `cycle_id`
+> - `label`
+> - `created_at`
+> - `git_sha`
+> - `is_origin`
+> - `input_reports`
+> - `raw_metrics`
+> - `capabilities`
+> - `delta_vs_previous`
+> - `summary`
+> - `recommendations`
+>
+> 默认能力维度：
+>
+> - `retrieval_quality`
+>   - 来源：`nDCG@10`、`MRR@10`、`scene_level_recall_at_10`。
+> - `fuzzy_understanding`
+>   - 来源：`stage_level_hit_at_3`、`purpose_level_hit_at_3`、`scene_level_recall_at_10`。
+> - `style_safety`
+>   - 来源：`1 - style_violation_at_3`。
+> - `rerank_potential`
+>   - 来源：`rerank_opportunity_nDCG@10`，该项越高表示“机会大但尚未解决”，报告中单独标记为 opportunity，不当作已完成能力。
+> - `qrels_trust`
+>   - 来源：`qrels_trust_level`、`manual_or_llm_count`、`bootstrap_only_count`、`needs_adjudication_count`、`vote_conflict_rate`。
+> - `cycle_operability`
+>   - 来源：active queue 是否有样本、报告是否完整、LLM 是否默认关闭、elapsed_seconds 是否可用。
+>
+> Normalized score 默认 0-100：
+>
+> - 正向指标按阈值线性映射，例如 `nDCG@10 >= 0.75` 视为强。
+> - 风险指标反向映射，例如 `style_violation_at_3 <= 0.05` 视为强。
+> - qrels trust 用分级：`low=25`、`medium=60`、`high=90`，再用人工/LLM覆盖率微调。
+> - `rerank_potential` 不进入总分，只作为下一轮优先级信号，避免“问题越大总分越高”。
+>
+> ### 3. Visualization Report
+>
+> Markdown 报告包含：
+>
+> - Cycle Summary：
+>   - 当前 cycle、上一轮、origin、git sha、输入报告数量。
+> - Capability Scoreboard：
+>   - 当前能力分数表。
+>   - 与上一轮 delta：`+ / - / 0`。
+> - SVG 图表：
+>   - capability bar chart：当前各能力分。
+>   - delta bar chart：相对上一轮变化。
+>   - trend line chart：多 cycle 的关键指标趋势。
+>   - qrels trust stacked bar：bootstrap/manual/LLM/needs adjudication。
+> - Bottleneck Analysis：
+>   - 如果 `qrels_trust=low`：优先补标注。
+>   - 如果 `rerank_opportunity_nDCG@10 >= 0.15`：优先做真实 reranker sample。
+>   - 如果 `style_violation_at_3 > 0.05`：优先处理 style negative。
+>   - 如果 `scene_level_recall_at_10 < 0.70` 且 oracle 不高：回到召回/query understanding。
+> - Next Cycle Recommendation：
+>   - 自动列出下一轮最值得跑的命令。
+>
+> ### 4. Integrate Into Flywheel
+>
+> 更新 `retrieval-flywheel-guide`，在最后追加：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever record-capability-cycle --cycle-id origin --as-origin --reports .tmp\qrels_audit_next.json .tmp\fuzzy_multi_next_fixed.json .tmp\rerank_upper_bound_next.json .tmp\pooled_qrels_next_report.json
+> python -m mocktesting.mock_retriever generate-capability-report --registry .tmp\capability_cycles.jsonl --output .tmp\capability_report.md
+> ```
+>
+> 实现后用当前状态创建 origin：
+>
+> - 输入报告优先使用：
+>   - `.tmp\qrels_audit_next.json`
+>   - `.tmp\fuzzy_multi_next_fixed.json`
+>   - `.tmp\rerank_upper_bound_next.json`
+>   - `.tmp\pooled_qrels_next_report.json`
+> - 如果某个文件缺失，命令跳过并在 `missing_reports` 中记录，不失败。
+> - origin 的 delta 全部为 `0` 或 `null`，后续 cycle 才计算变化。
+>
+> ## Test Plan
+>
+> - 单元测试：
+>   - 从不同 report method 中正确抽取 metric。
+>   - capability score 正确处理正向/反向指标。
+>   - `qrels_trust_level=low/medium/high` 映射正确。
+>   - origin cycle 不计算 previous delta。
+>   - 第二个 cycle 正确计算 delta。
+>   - SVG 生成不依赖外部包，输出包含合法 `<svg>`。
+> - 集成测试：
+>   - `record-capability-cycle --as-origin` 能读取 mock reports 并写 registry。
+>   - 连续记录两个 cycle 后，`generate-capability-report` 包含趋势图、delta 表和 recommendations。
+>   - `retrieval-flywheel-guide` 输出包含 capability cycle 两条新命令。
+> - 回归测试：
+>   - 默认实验命令不受影响。
+>   - LLM 默认仍关闭。
+>   - 全量 `pytest --basetemp .pytest-tmp/<name> -p no:cacheprovider` 通过。
+>
+> ## Assumptions
+>
+> - 可视化默认采用 Markdown + 本地 SVG，不引入 `plotly/matplotlib/pandas`。
+> - cycle registry 默认写入 `.tmp`，避免实验记录污染源码；代码中的默认路径可配置。
+> - 当前状态作为 `origin`，不代表高质量基线，只代表后续比较的时间零点。
+> - 能力分数是研发导航指标，不替代原始 `nDCG/ERR/MRR/qrels` 指标。
+</details>
+
+现有实验报告已经都有 `summary` 和 `experiment_metadata`，所以能力追踪最自然的接入点是：把每一轮 cycle 的关键 JSON 报告汇总成一个 registry，再生成 Markdown/HTML 可视化。这里有一个产品取舍需要你定一下：图表载体选哪种。
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # SceneWeaver 能力飞轮可视化 Infra 计划
+>
+> ## Summary
+>
+> 新增一个“能力周期报告”层，把每一轮 retrieval cycle 的实验结果汇总成可追踪时间线：当前状态作为 `origin`，后续每轮记录与上一轮相比哪些能力提升、退化或无变化。默认输出 **Markdown + 内嵌 SVG 图表**，不新增运行时依赖，适合本地快速查看和版本化归档。
+>
+> 核心目标：
+>
+> - 每个 cycle 记录输入报告、git sha、配置、关键指标、能力分数、相对上一轮 delta。
+> - 支持生成趋势图、能力雷达/柱状图、delta 表、主要瓶颈和下一步建议。
+> - 加入现有 retrieval flywheel：每轮实验结束后执行一次 `record-capability-cycle` 和 `generate-capability-report`。
+> - 用当前 `.tmp` 中已有报告生成第一条 `origin` cycle。
+>
+> ## Key Changes
+>
+> ### 1. Capability Cycle Registry
+>
+> 在 `src/mocktesting/mock_retriever.py` 新增命令：
+>
+> - `record-capability-cycle`
+>   - 参数：
+>     - `--cycle-id`，默认 `origin_<YYYYMMDD_HHMMSS>`。
+>     - `--label`，默认空。
+>     - `--reports`，接收多个 JSON 报告路径。
+>     - `--registry`，默认 `.tmp\capability_cycles.jsonl`。
+>     - `--output`，默认 `.tmp\capability_cycle_latest.json`。
+>     - `--as-origin`，标记当前 cycle 为起点，不计算 previous delta。
+>   - 行为：
+>     - 读取 qrels audit、fuzzy multirelevance、rerank upper bound、active qrels sampler、failure analysis、workflow/report 等 JSON。
+>     - 抽取统一 capability metrics。
+>     - 计算 normalized capability scores。
+>     - 追加写入 registry JSONL，并输出本轮 cycle JSON。
+>
+> - `generate-capability-report`
+>   - 参数：
+>     - `--registry`，默认 `.tmp\capability_cycles.jsonl`。
+>     - `--output`，默认 `.tmp\capability_report.md`。
+>     - `--chart-dir`，默认 `.tmp\capability_charts`。
+>   - 行为：
+>     - 读取 registry。
+>     - 生成 Markdown 报告。
+>     - 生成并引用本地 SVG 图表。
+>     - 展示 origin、latest、previous delta、趋势和瓶颈判断。
+>
+> ### 2. Capability Schema
+>
+> 每条 cycle JSON 使用稳定结构：
+>
+> - `cycle_id`
+> - `label`
+> - `created_at`
+> - `git_sha`
+> - `is_origin`
+> - `input_reports`
+> - `raw_metrics`
+> - `capabilities`
+> - `delta_vs_previous`
+> - `summary`
+> - `recommendations`
+>
+> 默认能力维度：
+>
+> - `retrieval_quality`
+>   - 来源：`nDCG@10`、`MRR@10`、`scene_level_recall_at_10`。
+> - `fuzzy_understanding`
+>   - 来源：`stage_level_hit_at_3`、`purpose_level_hit_at_3`、`scene_level_recall_at_10`。
+> - `style_safety`
+>   - 来源：`1 - style_violation_at_3`。
+> - `rerank_potential`
+>   - 来源：`rerank_opportunity_nDCG@10`，该项越高表示“机会大但尚未解决”，报告中单独标记为 opportunity，不当作已完成能力。
+> - `qrels_trust`
+>   - 来源：`qrels_trust_level`、`manual_or_llm_count`、`bootstrap_only_count`、`needs_adjudication_count`、`vote_conflict_rate`。
+> - `cycle_operability`
+>   - 来源：active queue 是否有样本、报告是否完整、LLM 是否默认关闭、elapsed_seconds 是否可用。
+>
+> Normalized score 默认 0-100：
+>
+> - 正向指标按阈值线性映射，例如 `nDCG@10 >= 0.75` 视为强。
+> - 风险指标反向映射，例如 `style_violation_at_3 <= 0.05` 视为强。
+> - qrels trust 用分级：`low=25`、`medium=60`、`high=90`，再用人工/LLM覆盖率微调。
+> - `rerank_potential` 不进入总分，只作为下一轮优先级信号，避免“问题越大总分越高”。
+>
+> ### 3. Visualization Report
+>
+> Markdown 报告包含：
+>
+> - Cycle Summary：
+>   - 当前 cycle、上一轮、origin、git sha、输入报告数量。
+> - Capability Scoreboard：
+>   - 当前能力分数表。
+>   - 与上一轮 delta：`+ / - / 0`。
+> - SVG 图表：
+>   - capability bar chart：当前各能力分。
+>   - delta bar chart：相对上一轮变化。
+>   - trend line chart：多 cycle 的关键指标趋势。
+>   - qrels trust stacked bar：bootstrap/manual/LLM/needs adjudication。
+> - Bottleneck Analysis：
+>   - 如果 `qrels_trust=low`：优先补标注。
+>   - 如果 `rerank_opportunity_nDCG@10 >= 0.15`：优先做真实 reranker sample。
+>   - 如果 `style_violation_at_3 > 0.05`：优先处理 style negative。
+>   - 如果 `scene_level_recall_at_10 < 0.70` 且 oracle 不高：回到召回/query understanding。
+> - Next Cycle Recommendation：
+>   - 自动列出下一轮最值得跑的命令。
+>
+> ### 4. Integrate Into Flywheel
+>
+> 更新 `retrieval-flywheel-guide`，在最后追加：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever record-capability-cycle --cycle-id origin --as-origin --reports .tmp\qrels_audit_next.json .tmp\fuzzy_multi_next_fixed.json .tmp\rerank_upper_bound_next.json .tmp\pooled_qrels_next_report.json
+> python -m mocktesting.mock_retriever generate-capability-report --registry .tmp\capability_cycles.jsonl --output .tmp\capability_report.md
+> ```
+>
+> 实现后用当前状态创建 origin：
+>
+> - 输入报告优先使用：
+>   - `.tmp\qrels_audit_next.json`
+>   - `.tmp\fuzzy_multi_next_fixed.json`
+>   - `.tmp\rerank_upper_bound_next.json`
+>   - `.tmp\pooled_qrels_next_report.json`
+> - 如果某个文件缺失，命令跳过并在 `missing_reports` 中记录，不失败。
+> - origin 的 delta 全部为 `0` 或 `null`，后续 cycle 才计算变化。
+>
+> ## Test Plan
+>
+> - 单元测试：
+>   - 从不同 report method 中正确抽取 metric。
+>   - capability score 正确处理正向/反向指标。
+>   - `qrels_trust_level=low/medium/high` 映射正确。
+>   - origin cycle 不计算 previous delta。
+>   - 第二个 cycle 正确计算 delta。
+>   - SVG 生成不依赖外部包，输出包含合法 `<svg>`。
+> - 集成测试：
+>   - `record-capability-cycle --as-origin` 能读取 mock reports 并写 registry。
+>   - 连续记录两个 cycle 后，`generate-capability-report` 包含趋势图、delta 表和 recommendations。
+>   - `retrieval-flywheel-guide` 输出包含 capability cycle 两条新命令。
+> - 回归测试：
+>   - 默认实验命令不受影响。
+>   - LLM 默认仍关闭。
+>   - 全量 `pytest --basetemp .pytest-tmp/<name> -p no:cacheprovider` 通过。
+>
+> ## Assumptions
+>
+> - 可视化默认采用 Markdown + 本地 SVG，不引入 `plotly/matplotlib/pandas`。
+> - cycle registry 默认写入 `.tmp`，避免实验记录污染源码；代码中的默认路径可配置。
+> - 当前状态作为 `origin`，不代表高质量基线，只代表后续比较的时间零点。
+> - 能力分数是研发导航指标，不替代原始 `nDCG/ERR/MRR/qrels` 指标。
+
+<details><summary>23 previous messages</summary>
+
+> 我开始实现这个能力飞轮层。先读一下当前 CLI/报告函数的落点，然后会补两个新命令：记录 cycle 和生成可视化报告，最后用 `.tmp` 里的现有报告生成 `origin`。
+>
+> 我已经确认现有报告都有统一 `summary/experiment` 结构，适合做聚合层。现在开始补 capability cycle 的默认路径、CLI 参数和命令分发。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+4 -0)
+>
+> </details>
+>
+> 默认路径已放到 `.tmp`，避免实验周期记录污染源码。接下来把两个新命令挂到 CLI。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+13 -0)
+>
+> </details>
+>
+> CLI 参数已加。现在补命令分发，保持输出 summary 的风格和现有 mocktesting 命令一致。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+7 -0)
+>
+> </details>
+>
+> 接下来是主体函数：报告抽取、能力分计算、cycle registry、SVG 生成和 Markdown 汇总。我会尽量做成小函数，方便测试和以后替换评分规则。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/mocktesting/mock_retriever.py` (+730 -1)
+>
+> </details>
+>
+> 主体函数已经写入。现在我先跑一个快速语法/目标测试，看看有没有拼写或 SVG 字符串问题，再补测试用例。
+>
+> 语法通过。接下来补单元测试，覆盖指标抽取、origin/delta、SVG 和 report markdown。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+6 -0)
+>
+> </details>
+>
+> 我还会加一个小集成式测试，直接通过 command 函数写 registry 和生成 Markdown，避免只测内部纯函数。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+2 -0)
+>
+> </details>
+>
+> 测试会用极小的 mock JSON 报告，不跑真实检索，保证速度和稳定性。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_mock_embedding_retriever.py` (+153 -0)
+>
+> </details>
+>
+> 测试已补上，开始跑目标测试。若有评分细节不符合预期，我会调整为更稳定的口径。
+>
+> 目标测试通过：57 passed。现在我用现有 `.tmp` 报告生成第一条 `origin` cycle，并生成 Markdown + SVG 能力报告。
+>
+> registry 还不存在，四个 origin 输入报告都在。现在正式记录 origin。
+>
+> origin 已记录，总分 76.708，但 qrels 可信度还是 low，且 rerank opportunity 很高。现在生成图表和 Markdown 报告。
+>
+> 报告已生成，包含 4 张 SVG。接下来我快速抽查 Markdown 和 registry，确保链接/字段都正常。
+>
+> 抽查正常：Markdown 链接到 4 个 SVG，origin 的 qrels trust 低、rerank opportunity 高也都记录下来了。我再跑飞轮指南和全量测试做最后验证。
+>
+> 全量测试通过：136 passed。最后我看一下本轮相关 diff 摘要，给你一个清晰收口。
+</details>
+
+已实现能力飞轮可视化 infra，并把当前状态记录成第一条 `origin`。
+
+**开发/优化**
+新增了两个 CLI：
+
+```powershell
+python -m mocktesting.mock_retriever record-capability-cycle ...
+python -m mocktesting.mock_retriever generate-capability-report ...
+```
+
+并更新了 `retrieval-flywheel-guide`，现在飞轮最后会提示记录 cycle 和生成能力报告。实现集中在 [mock_retriever.py](./src/mocktesting/mock_retriever.py)，测试在 [test_mock_embedding_retriever.py](./tests/test_mock_embedding_retriever.py)。
+
+**实验**
+已用当前 `.tmp` 报告生成 origin：
+
+- [capability_cycles.jsonl](./.tmp/capability_cycles.jsonl)
+- [capability_cycle_latest.json](./.tmp/capability_cycle_latest.json)
+- [capability_report.md](./.tmp/capability_report.md)
+- SVG 图表目录：[capability_charts](./.tmp/capability_charts)
+
+**评估**
+origin 当前能力摘要：
+
+- `overall_score = 76.708`
+- `retrieval_quality = 88.165`
+- `fuzzy_understanding = 94.078`
+- `style_safety = 93.333`
+- `qrels_trust = 15.965`
+- `rerank_potential = 100.0`，这是 opportunity，不计入总分
+- `qrels_trust_level = low`
+- `rerank_opportunity_nDCG@10 = 0.30891`
+
+测试通过：
+
+```text
+136 passed
+```
+
+**分析结果**
+能力图表现在已经能回答“这一轮相比上一轮提升了什么”。当前是 origin，所以 delta 都是 0。最明显的瓶颈仍然是 qrels trust：bootstrap-only，缺人工/LLM 审核；另一个强信号是 rerank 上限很高，下一轮值得做真实 reranker sample。
+
+**下一阶段**
+下一轮完成 adjudication 或 LLM rerank 小样本后，再跑：
+
+```powershell
+python -m mocktesting.mock_retriever record-capability-cycle --cycle-id cycle_002 --reports ...
+python -m mocktesting.mock_retriever generate-capability-report
+```
+
+这样报告会自动显示 `cycle_002` 相对 `origin` 哪些能力提升、退化或持平。
+
+> 现在我需要收纳一下src/mocktesting ,正式更名为 检索实验平台(我不知道英文是什么啊)，我需要你重构一下，因为这个子项目已经从最开始的状态变了太多了，你需要梳理这个子项目，按照行业最佳实践来重构，包括不限于项目框架。具体的我不太清楚有什么好方法，你可以检索一下，然后告知我有什么比较好的范式，并且举例应用效果是什么样的。如果能找到openai infra and experiment 那我肯定直接用这个框架了哈哈哈
+
+<details><summary>5 previous messages</summary>
+
+> 我先做一轮资料检索和本地结构盘点，再给你一个“这个子项目应该叫什么、怎么分层、哪些行业范式值得借鉴、哪些不该直接照搬”的判断。这个阶段我先不改代码，免得把一个已经长大的实验平台一刀切成更难维护的形状。
+>
+> <details><summary>Searched web 7 times</summary>
+>
+> <details><summary>Searched web 7 times</summary>
+>
+> - Searched web for `OpenAI Evals framework experiment evaluation repository`
+> - Searched web for `site:openai.com/index/evals OpenAI Evals framework`
+> - Searched web for `https://platform.openai.com/docs/guides/evals`
+> - Searched web for `information retrieval experiment framework qrels nDCG TREC best practices`
+> - Searched web for `https://mlflow.org/docs/latest/ml/tracking/`
+> - Searched web for `RAG evaluation framework retrieval metrics context precision recall ragas docs`
+> - Searched web for `https://docs.ragas.io/en/stable/`
+>
+> </details>
+>
+> </details>
+>
+> 我已经查到几类可借鉴的框架：OpenAI Evals / Simple Evals、MLflow/W&B 的 run-artifact-metric 范式、LangSmith/Ragas 的 dataset-experiment-evaluator 范式、TREC/BEIR 的 qrels/benchmark 范式。接下来我扫一下 `src/mocktesting` 的实际结构，才能把这些范式映射到你这个子项目，而不是空谈架构图。
+>
+> <details><summary>Searched web 11 times</summary>
+>
+> <details><summary>Searched web 11 times</summary>
+>
+> - Searched web for `https://github.com/openai/evals`
+> - Searched web for `'datasets' in https://platform.openai.com/docs/guides/evals`
+> - Searched web for `'Experiments' in https://mlflow.org/docs/latest/ml/tracking/`
+> - Searched web for `https://docs.smith.langchain.com/evaluation`
+> - Searched web for `'Metrics' in https://docs.ragas.io/en/stable/concepts/metrics/overview/`
+> - Searched web for `'Heterogeneous Benchmark' in https://beir.ai/`
+> - Searched web for `'simple-evals' in https://github.com/openai/simple-evals`
+> - Searched web for `https://developers.openai.com/api/docs/guides/graders`
+> - Searched web for `https://platform.openai.com/docs/guides/evals-best-practices`
+> - Searched web for `https://platform.openai.com/docs/guides/evals-best-practices`
+> - Searched web for `'If your model passes' in https://platform.openai.com/docs/guides/evaluation-best-practices`
+>
+> </details>
+>
+> </details>
+>
+> 我查完资料和本地结构后，判断很明确：`src/mocktesting` 已经不该叫 mocktesting 了。它现在不是 mock，而是一个完整的 **Retrieval Experiment Platform**。
+>
+> 我建议正式中文名叫：**检索实验平台**
+> 英文名建议叫：**Retrieval Lab**。
+> 目录/package 名建议用：`retrieval_lab`。
+>
+> 原因很简单：`Retrieval Experiment Platform` 太长，`Retrieval Evaluation Platform` 又偏评测，`Retrieval Lab` 更像一个可跑实验、可沉淀数据、可比较策略、可记录周期的工程子系统。
+>
+> **资料结论**
+> OpenAI 这边最接近的是 Evals。OpenAI Evals API 的基本范式是：定义 eval 任务、准备 test inputs、用 graders/testing criteria 评测、跑 eval run、分析结果并迭代。这个很适合我们借鉴成 `datasets -> workflows -> evaluators -> runs -> reports`。OpenAI 文档也强调 eval-driven development、task-specific evals、log everything、automate when possible、human feedback 校准自动指标。参考：[OpenAI Evals guide](https://platform.openai.com/docs/guides/evals)、[OpenAI evaluation best practices](https://platform.openai.com/docs/guides/evaluation-best-practices)。
+>
+> 不过要注意一点：OpenAI 文档里写了 Evals platform 正在退役，2026-10-31 变 read-only，2026-11-30 计划关闭。所以不能把你的核心 infra 直接绑到 OpenAI Evals 平台上。可以借鉴它的范式，不建议依赖它做主系统。
+>
+> OpenAI 的 `simple-evals` 更像轻量参考实现：一个 eval 一个文件，清晰、可读、透明，适合做“如何组织 evaluator / sampler / benchmark runner”的参考。但它也标注 2025 年后不再更新新模型结果。参考：[openai/simple-evals](https://github.com/openai/simple-evals)。
+>
+> MLflow 的范式也很重要：Experiment 包含 Runs；Run 记录 params、metrics、artifacts、metadata；UI/搜索用于比较结果。这跟我们现在的 capability cycle、report、qrels、artifact 很贴。参考：[MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/)。
+>
+> LangSmith 的评价体系也高度契合：Dataset / Example / Experiment / Evaluator / Human annotation queue / online-offline feedback loop。尤其是它明确区分 offline evaluation 和 online evaluation，并强调 annotation queue、人类反馈、pairwise、LLM-as-judge。参考：[LangSmith evaluation concepts](https://docs.smith.langchain.com/evaluation)。
+>
+> BEIR/TREC 检索领域的范式则告诉我们：检索实验平台要用 corpus / queries / qrels / runfile / metrics 这些稳定概念；指标用 nDCG@k、MAP、Recall、Precision、MRR；结果可以保存 runfile 供 rerank 使用。参考：[BEIR](https://beir.ai/)。
+>
+> **适合我们的目标架构**
+> 我建议把 `src/mocktesting` 重构成：
+>
+> ```text
+> src/retrieval_lab/
+>   cli.py
+>   config/
+>   datasets/
+>   indexes/
+>   planners/
+>   retrieval/
+>   ranking/
+>   qrels/
+>   evaluators/
+>   experiments/
+>   reports/
+>   capability/
+>   llm/
+>   fixtures/
+>   artifacts/
+> ```
+>
+> 对应关系：
+>
+> - `datasets/`：case 生成、split、fuzzy/paraphrase/style variants
+> - `indexes/`：embedding cache、matrix cache、prepared index、BM25 index
+> - `planners/`：rule / multi_query / hyde / llm planner
+> - `retrieval/`：semantic / lexical / hybrid / RRF recall
+> - `ranking/`：constraints / signature / adaptive / rerank
+> - `qrels/`：graded qrels、pooled qrels、audit、adjudication、active sampling
+> - `evaluators/`：nDCG/MRR/ERR、style violation、failure attribution、rerank upper bound
+> - `experiments/`：workflow runners、experiment registry、flywheel cycle
+> - `reports/`：Markdown/JSON/SVG report generation
+> - `capability/`：能力周期报告，也就是刚加的 capability cycle
+> - `llm/`：LLM judge/rerank/planner 的可选封装，默认 off
+> - `fixtures/`：现在的 `retrieval_review` / `retrieval_viewing`
+>
+> **当前最大问题**
+> 本地结构也印证了这点：
+>
+> - `mock_retriever.py` 已经超过 300KB，承担了 CLI、index、ranking、qrels、metrics、reports、capability cycle，太重。
+> - `eval_outputs` 和 embedding cache 在 `src` 下面，不再适合长期沉淀实验 artifact。
+> - `README.md` 出现乱码，说明文档/编码治理也要一起修。
+> - 子项目名字 `mocktesting` 已经误导，因为现在不是 mock，而是正式实验平台。
+>
+> **我建议采用的范式**
+> 不是直接照搬某一个框架，而是组合：
+>
+> ```text
+> OpenAI Evals 的任务/数据/评判/run 思路
+> + MLflow 的 experiment/run/metric/artifact registry
+> + LangSmith 的 dataset/example/evaluator/annotation queue
+> + BEIR 的 corpus/query/qrels/runfile/IR metrics
+> = SceneWeaver Retrieval Lab
+> ```
+>
+> 应用到你的项目后，效果应该是这样：
+>
+> ```powershell
+> python -m retrieval_lab run workflow-comparison --split test --limit 60
+> python -m retrieval_lab qrels audit --qrels .tmp\pooled_qrels_next.jsonl
+> python -m retrieval_lab qrels sample-active --sample-size 80
+> python -m retrieval_lab eval fuzzy --planner multi_query
+> python -m retrieval_lab eval rerank-upper-bound --rerank-depth 20
+> python -m retrieval_lab cycle record --cycle-id cycle_002
+> python -m retrieval_lab report capability
+> ```
+>
+> 而不是现在这样所有东西都挤在：
+>
+> ```powershell
+> python -m mocktesting.mock_retriever ...
+> ```
+>
+> **推荐迁移策略**
+> 不要一次性硬删 `mocktesting`。我建议三步：
+>
+> 1. 新建 `src/retrieval_lab`，把核心模块按职责拆进去。
+> 2. 保留 `src/mocktesting` 作为兼容 shim，一段时间内旧命令还能跑。
+> 3. 测
+</details>
+
+试迁移到新 import，旧 import 只留少量 backward compatibility 测试。
+
+**下一步实施优先级**
+如果现在开始重构，我建议先做第一阶段，不碰算法，只搬结构：
+
+1. 建 `retrieval_lab` 包和 `cli.py`
+2. 拆 `mock_retriever.py`：
+   - CLI parser
+   - qrels
+   - metrics
+   - reports
+   - capability
+   - rerank
+   - experiment runners
+3. 把 `retrieval_review` / `retrieval_viewing` 改名或映射为 `fixtures/review`、`fixtures/viewing`
+4. 把默认输出从 `src/mocktesting/eval_outputs` 迁到 `.tmp/retrieval_lab` 或 `artifacts/retrieval_lab`
+5. 修 README 编码并重写成“检索实验平台”文档
+6. 保留兼容命令和测试，确保 `136 passed` 继续通过
+
+我的判断：这次重构是必要的。不是为了好看，而是为了让这个子项目从“一个越长越大的脚本”变成真正可以继续迭代两三个月的实验平台。
+
+<details><summary>29 previous messages</summary>
+
+> 可以，我按你写的保险策略来做：新建 `src/retreieval_lab` 作为平行对照子项目，不动 `src/mocktesting`。我会先做一轮可运行的“外壳+分层骨架+兼容验证”，每轮都跑测试和与现有 mocktesting 的行为对比，再继续往里拆。
+>
+> 我先做只读盘点，重点找所有现有 CLI 命令和测试引用点，避免第一轮重构就破坏对照组。
+>
+> 第一轮我会做成“可运行的新包 + 现代化 CLI 映射 + 架构骨架”，底层先复用 `mocktesting`，这样对照组不动、行为可比。之后再逐步把实现从旧巨型模块迁入新分层。
+>
+> <details><summary>Created 19 files</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+39 -0)
+> - Wrote `./src/retreieval_lab/__init__.py` (+11 -0)
+> - Wrote `./src/retreieval_lab/__main__.py` (+7 -0)
+> - Wrote `./src/retreieval_lab/architecture.py` (+28 -0)
+> - Wrote `./src/retreieval_lab/artifacts/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/capability/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+58 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+103 -0)
+> - Wrote `./src/retreieval_lab/datasets/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/evaluators/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/fixtures/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/indexes/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/llm/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/planners/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/ranking/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/reports/__init__.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/retrieval/__init__.py` (+1 -0)
+>
+> </details>
+>
+> 第一轮骨架已经建好，包名按你指定的 `retreieval_lab`。我现在补对照测试：现代命令映射到旧命令，且新 CLI 输出和 mocktesting 后端一致。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+149 -0)
+>
+> </details>
+>
+> 对照测试已写好。现在跑新包的定向测试和几个 CLI smoke，看第一轮是否站得住。
+>
+> 第一轮新包 CLI 和对照测试通过。下一步我把计划状态更新一下，然后做一次全量测试，确认新子项目没有扰动现有系统。
+>
+> 第一轮通过，但我还不满意：`flywheel guide` 现在虽然能跑，内容仍来自旧 backend，命令字符串还是 `mocktesting.mock_retriever`。第二轮我会让 Retrieval Lab 拥有自己的原生命令指南，同时继续保留 legacy passthrough。
+>
+> 我开始第二轮代码：新增 `experiments.flywheel` 原生指南，让新平台输出 `python -m retreieval_lab ...` 的飞轮命令，而不是旧命令。
+>
+> <details><summary>Created 1 file, edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+4 -0)
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+77 -0)
+>
+> </details>
+>
+> 现在改 CLI，让 `retreieval_lab flywheel guide` 走原生指南；旧的 `retreieval_lab retrieval-flywheel-guide` 仍然走兼容桥，便于对照。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+18 -0)
+>
+> </details>
+>
+> 接下来补 facade API，让 qrels/capability/evaluators/reports 这些新分层开始拥有稳定导出，而不是所有使用者都去 import 巨型 legacy 模块。
+>
+> <details><summary>Created 4 files, edited 4 files</summary>
+>
+> - Wrote `./src/retreieval_lab/capability/__init__.py` (+16 -0)
+> - Wrote `./src/retreieval_lab/capability/service.py` (+17 -0)
+> - Wrote `./src/retreieval_lab/evaluators/__init__.py` (+4 -0)
+> - Wrote `./src/retreieval_lab/evaluators/metrics.py` (+5 -0)
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+24 -0)
+> - Wrote `./src/retreieval_lab/qrels/service.py` (+25 -0)
+> - Wrote `./src/retreieval_lab/reports/__init__.py` (+4 -0)
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+5 -0)
+>
+> </details>
+>
+> 分层 facade 已加。现在更新测试：新 `flywheel guide` 应输出 Retrieval Lab 命令；legacy passthrough 仍需和 mocktesting 一致。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+40 -3)
+>
+> </details>
+>
+> 第二轮测试已更新。现在跑新包测试和 smoke，看现代指南与 legacy passthrough 是否都正常。
+>
+> 第二轮通过。现代指南已经换成 `retreieval_lab` 命令，legacy passthrough 仍然可对照。下一步跑全量测试。
+>
+> 我还想做第三轮小整理：补 `config` 层和 `retrieval-lab` 控制台入口，让这个子项目更像一个正式实验平台，而不仅是 `python -m` 包。然后再跑一次全量测试。
+>
+> 我会把默认路径和项目名称收进 `retreieval_lab.config`，并在 `pyproject.toml` 加一个更自然的 `retrieval-lab` 命令，包名仍保持你指定的 `retreieval_lab`。
+>
+> <details><summary>Created 2 files, edited 3 files</summary>
+>
+> - Wrote `./pyproject.toml` (+1 -0)
+> - Wrote `./src/retreieval_lab/architecture.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+2 -1)
+> - Wrote `./src/retreieval_lab/config/__init__.py` (+5 -0)
+> - Wrote `./src/retreieval_lab/config/paths.py` (+24 -0)
+>
+> </details>
+>
+> 配置层和 console script 已加。现在补测试，确保架构 manifest 包含 config，路径层指向新包和 legacy baseline。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+6 -0)
+>
+> </details>
+>
+> 第三轮代码很小，直接跑新包测试、architecture smoke 和全量测试。
+>
+> modern alias 已经能跑真实 qrels audit。现在跑全量测试，确保 pyproject 新入口和新包没有影响现有项目。
+>
+> 第三轮也通过。这个阶段我已经比较满意“平行子项目”的安全性和入口设计；还没有满意到可以说重构完成，因为真正把旧巨型实现拆出还要后续几轮。最后我做一次状态检查和文件清单。
+>
+> 我看到运行 smoke 在新包里生成了 `__pycache__`，这是临时产物，不应该留在子项目结构里。我会安全清掉这些缓存目录，然后再看状态。
+>
+> 缓存已清理。我做最后状态和测试数确认。
+</details>
+
+可以，第一组重构轮次已经落地。我按你指定的新路径建了平行子项目：`src/retreieval_lab`，没有改 `src/mocktesting`，它仍然作为对照组存在。
+
+本轮完成了三轮自检式重构：
+
+1. 新建 Retrieval Lab 子项目骨架
+   包含 `datasets / planners / indexes / retrieval / ranking / qrels / evaluators / experiments / reports / capability / config` 等分层。
+
+2. 新增现代 CLI
+   现在可以这样跑：
+
+```powershell
+python -m retreieval_lab flywheel guide
+python -m retreieval_lab qrels audit --qrels .tmp\pooled_qrels_next.jsonl
+python -m retreieval_lab eval fuzzy --split test --limit 60
+python -m retreieval_lab cycle record --cycle-id cycle_002
+python -m retreieval_lab report capability
+```
+
+旧命令也能通过新包 passthrough：
+
+```powershell
+python -m retreieval_lab retrieval-flywheel-guide
+```
+
+3. 新增正式 console script
+   `pyproject.toml` 里加了：
+
+```toml
+retrieval-lab = "retreieval_lab.cli:main"
+```
+
+包名按你写的 `retreieval_lab`，但命令名用更自然的 `retrieval-lab`。
+
+**自检结果**
+新增测试：[test_retreieval_lab_cli.py](./tests/test_retreieval_lab_cli.py)
+
+验证内容：
+
+- 现代命令能映射到旧实验能力。
+- `flywheel guide` 输出新平台命令，而不是旧 `mocktesting` 命令。
+- legacy passthrough 与 `mocktesting` 输出一致。
+- capability report / cycle 能通过新 CLI 写出。
+- qrels facade API 可用。
+- architecture manifest 可读。
+
+测试结果：
+
+```text
+tests\test_retreieval_lab_cli.py: 6 passed
+full suite: 142 passed
+```
+
+**当前结构**
+核心文件：
+
+- [cli.py](./src/retreieval_lab/cli.py)
+- [compat.py](./src/retreieval_lab/compat.py)
+- [architecture.py](./src/retreieval_lab/architecture.py)
+- [experiments/flywheel.py](./src/retreieval_lab/experiments/flywheel.py)
+- [README.md](./src/retreieval_lab/README.md)
+
+**当前判断**
+这一轮我满意“安全性”和“新平台入口”：它已经能作为 `mocktesting` 的平行对照组使用。
+
+但我还不认为整体重构完成。现在很多实现仍通过 facade/compat 复用 `mocktesting.mock_retriever`。下一轮应该开始把真正实现拆出来，优先顺序我建议是：
+
+1. `qrels` 独立化
+2. `capability` 独立化
+3. `evaluators/metrics` 独立化
+4. `experiments/flywheel` 继续原生化
+5. 最后再拆 retrieval/ranking/index 这些高风险核心路径
+
+这条路线稳，不会一上来把 300KB 旧模块炸开。
+
+<details><summary>53 previous messages</summary>
+
+> 我继续推进下一轮。这一轮目标不碰 `src/mocktesting`，把优先级最高、边界最清晰的能力从“facade 代理”推进到 Retrieval Lab 自有实现：先拆 `qrels` 和 `capability`，因为它们是实验平台的地基，风险比 retrieval/ranking 小很多。
+>
+> 先做只读盘点，确认哪些新包模块仍然只是从 `mocktesting.mock_retriever` 导入，以及需要复制哪些函数。
+>
+> 我会把 `qrels` 先真正独立出来：不再从 `mocktesting.mock_retriever` import，而是在 `retreieval_lab.qrels` 内拥有自己的 qrels 读取、写入、可信度、审计和合并逻辑。这个模块边界稳定，适合先拆。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/service.py` (+274 -0)
+>
+> </details>
+>
+> `qrels` 的核心审计/合并/可信度逻辑现在已经是 Retrieval Lab 原生实现；只有 active sampling 暂时保留明确的兼容边界，因为它依赖完整 ranked row 结构，下一轮再拆。接下来我修导出并开始 capability 独立化。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+2 -0)
+>
+> </details>
+>
+> 现在迁 `capability`。我会把 cycle 记录、能力评分、Markdown+SVG 报告生成放进 `retreieval_lab.capability`，CLI 的 `cycle record` 和 `report capability` 改为走新实现，而旧短横线命令仍可 passthrough。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/capability/service.py` (+667 -0)
+>
+> </details>
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先接着上一个实现状态做一次体检：确认 `retreieval_lab` 现在哪些模块已经独立、哪些还在透传 `mocktesting`，然后把这轮重构补稳。并行我也会查一下实验平台的主流范式，避免只是“换个目录名”。
+>
+> <details><summary>Searched web 6 times</summary>
+>
+> <details><summary>Searched web 6 times</summary>
+>
+> - Searched web for `OpenAI Evals repository evaluation framework samples evals`
+> - Searched web for `OpenAI Evals GitHub evaluation framework`
+> - Searched web for `OpenAI Evals GitHub openai evals repository evals README`
+> - Searched web for `https://github.com/openai/evals`
+> - Searched web for `https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking`
+> - Searched web for `https://docs.pinecone.io/guides/search/rerank-results`
+>
+> </details>
+>
+> </details>
+>
+> 资料这边先有个明确方向：OpenAI Evals/BEIR/TREC 更强调“数据集、qrels、指标、run artifact”；LangSmith/MLflow 更强调“实验记录、trace、对比和人工/LLM 评审”；Azure/Pinecone 的成熟检索链路则是 hybrid/RRF + two-stage rerank。这个和我们把 `mocktesting` 收纳成独立 Retrieval Lab 的方向是对齐的。
+>
+> 目前状态看起来是“并行新包已经搭起来了”，但还有两块需要收尾：CLI 还把 `cycle/report` 透传给旧后端，刚迁出来的 native capability service 还没有接进入口；另外文件里有中文帮助文本被编码污染，我会顺手修成稳定 ASCII/UTF-8。
+>
+> 接下来我会把新包从“漂亮外壳”往“真实子项目”推进一格：`cycle record` / `report capability` 改为 native 实现，不再绕回 `mocktesting`；`qrels audit` 也可以先 native 化，作为实验资产层的第一块砖。
+>
+> 小测试已经绿了，说明外壳没有坏。现在我会做一轮更实质的拆分：把 qrels audit/merge 和 capability cycle/report 放到 `retreieval_lab` 自己的命令入口里，保留其他复杂实验继续透传，这样不会牵动旧平台。
+>
+> 这轮重构不会“硬切大脑”：复杂召回、ranking、planner 仍保持兼容后端；但 qrels/capability 这两类更像平台基础设施的能力，适合先迁出来。这样以后每一轮实验都有自己的资产层和能力趋势，不会继续埋在一个巨大的 mock 脚本里。
+>
+> 我正在读旧命令的边界，而不是大范围复制。目标是把稳定、低耦合的部分抽出来：qrels 文件读写/审计/合并、capability 记录/报告；那些依赖 ranking rows 的 sampler 暂时保留透传。
+>
+> 旧命令结构很清楚：audit 只是读 qrels、算 trust summary、可写 markdown；merge 是把人工/LLM vote 合进去。这个拆出来风险很低，我会补一个小型 argparse 分发器，专门接这些 native infra 命令。
+>
+> 我还会把 reports 层从旧模块依赖里拆一小段：不做完整报告系统，只提供 qrels/capability 能用的轻量 markdown。这个包的方向会变成：新平台先拥有“实验资产与记录”，旧包继续当行为 baseline。
+>
+> 接下来开始改文件：新增 `qrels/commands.py` 和 `reports/markdown.py` 的 native 实现，并让 `cli.py` 对这些 infra 命令短路到新包。旧的 `mocktesting` 完全不动。
+>
+> 我会保持新 CLI 的输出契约偏“实验工具友好”：`cycle record` 打印完整 cycle JSON（方便后续脚本接），`report capability` 打印 summary；qrels audit/merge 打印 summary 并写完整报告。这个和当前测试期望一致，也更像实验 infra。
+>
+> 现在动手改。先做 native 命令与报告工具，再跑针对性测试和 smoke 命令确认新入口真的没有回到旧包。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/commands.py` (+199 -0)
+>
+> </details>
+>
+> qrels 命令层已经独立出来了。下一步补报告层和 CLI 分发，让这些命令真正走 `retreieval_lab` 自己的实现。
+>
+> <details><summary>Created 1 file, deleted 1 file</summary>
+>
+> - Deleted `./src/retreieval_lab/reports/markdown.py` (+0 -5)
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+85 -0)
+>
+> </details>
+>
+> 报告层现在也不再从旧 mock 脚本导入。接着我会改 CLI，让 modern 命令优先用 native infra；旧命令仍然可以作为兼容后端存在。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+4 -0)
+>
+> </details>
+>
+> CLI 文件里有编码污染，局部 patch 命中失败。我会直接重写这个小文件，内容更清晰，也顺便把乱码帮助文本清掉。
+>
+> <details><summary>Created 1 file, deleted 1 file</summary>
+>
+> - Deleted `./src/retreieval_lab/cli.py` (+0 -77)
+> - Wrote `./src/retreieval_lab/cli.py` (+169 -0)
+>
+> </details>
+>
+> 改完第一批了。现在我会跑 py_compile 和专门测试，看看 native qrels/capability 的入口有没有漏参、输出契约有没有变形。
+>
+> 专门测试已经通过，CLI aliases 也正常。接下来跑一次真实 smoke：如果 `.tmp` 里有现有 qrels/报告，就用它们生成 audit 和 capability 报告，确认这个新包可以接住当前实验状态。
+>
+> `.tmp` 中已有足够的报告文件。我会用新入口写一套 `retreieval_lab_native_*` smoke 产物，避免覆盖你现有的正式实验报告。
+>
+> native qrels audit 跑通了，结果也暴露出我们之前判断的核心问题：现在全是 bootstrap-only，冲突率约 13.5%，所以它适合指导方向，但还不适合当“高可信裁判”。我继续生成 capability cycle/report。
+>
+> smoke 结果也正常，capability report 和 SVG 都生成了。现在我会补测试，专门覆盖 native qrels audit/merge 和 capability report，防止后面迁移时这个基础层悄悄退化。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/service.py` (+2 -0)
+>
+> </details>
+>
+> 我也会加一个“对照旧包 summary”的测试，但只对稳定 qrels 逻辑做对照，不把整个旧 ranking 平台拖进来。这样新包不会失去 baseline sense。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+128 -8)
+>
+> </details>
+>
+> 测试已经写上了：一个和旧 qrels summary 对照，一个走新 CLI 的 audit，一个走 merge-adjudicated。现在跑它们，看有没有细节偏差。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+0 -1)
+>
+> </details>
+>
+> 新增测试通过了。下一步跑全量测试，确认这个收纳动作没有影响旧实验命令；同时扫一下新包里还剩哪些显式 legacy 依赖，作为下一轮迁移清单。
+>
+> 全量测试绿了：`145 passed`。`rg` 也显示剩下的旧依赖已经缩到几个明确边界：compat 后端、evaluators metrics facade、active qrels sampler、测试里的 baseline 对照。现在我会整理 diff/status，并把 README 补成更像“检索实验平台”的项目说明。
+>
+> <details><summary>Searched web 4 times</summary>
+>
+> <details><summary>Searched web 4 times</summary>
+>
+> - Searched web for `site:github.com/openai/evals OpenAI Evals README`
+> - Searched web for `https://github.com/openai/evals`
+> - Searched web for `'Reranking is a two-stage process' in https://docs.pinecone.io/guides/search/rerank-results`
+> - Searched web for `https://docs.smith.langchain.com/evaluation`
+>
+> </details>
+>
+> </details>
+>
+> 资料侧也确认了：OpenAI Evals 强调 eval registry 和自定义 eval，BEIR 强调 qrels + NDCG/MRR 等标准 IR 指标，LangSmith/MLflow 强调 dataset/experiment/annotation/tracing，Azure/Pinecone 强调 hybrid/RRF 和 two-stage rerank。README 我会按这个范式更新，不绑定外部服务。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+42 -11)
+>
+> </details>
+>
+> 这一轮已经把资产层和能力层迁出来了。为了让新包更像真正实验平台，我再抽一块低风险的 evaluator：graded IR metrics（nDCG/ERR/MRR/Judged/Recall），这也是 BEIR/TREC 范式的核心，不应该长期依赖旧巨型脚本。
+>
+> `evaluators.metrics` 现在只是 facade，我会把标准指标原生化：nDCG、ERR、MRR、Judged、Recall，以及 recall-bound 归因摘要。这类纯函数很好迁移，也方便后面评测可信度继续增强。
+>
+> <details><summary>Created 1 file, deleted 1 file</summary>
+>
+> - Deleted `./src/retreieval_lab/evaluators/metrics.py` (+0 -5)
+> - Wrote `./src/retreieval_lab/evaluators/metrics.py` (+192 -0)
+>
+> </details>
+>
+> evaluator 纯函数已经 native 化。接下来补一个对照测试，确保 nDCG/MRR 和 recall-bound 行为没有漂移。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/__init__.py` (+7 -2)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+56 -0)
+>
+> </details>
+>
+> 这两个测试是有意和旧 `mocktesting` 对照的：新包自己算，但结果必须和旧实现一致。现在跑测试。
+>
+> evaluator 迁移也过了，剩下的旧依赖现在只剩 compat、active sampler 和测试里的显式 baseline 对照，这是我希望看到的边界。最后跑全量测试和一次状态汇总。
+>
+> 全量测试通过：`147 passed`。我再跑两个轻量 CLI smoke，确认命令树和 architecture 输出都可用；然后我会给你一个简短的收纳结果、行业范式判断和下一轮重构建议。
+>
+> CLI smoke 也正常。现在只剩整理结论：我会把“为什么这样重构”讲清楚，也说明现在哪些已经 native、哪些还作为兼容边界保留。
+</details>
+
+已经把 `src/mocktesting` 的“实验平台化”收纳做了第一轮，而且没有改动 `src/mocktesting` 本体。新子项目按你的要求放在 `src/retreieval_lab`，产品名叫 **Retrieval Lab / 检索实验平台**。
+
+这轮实现的核心：
+
+- 新增独立包与 CLI：[src/retreieval_lab/cli.py](./src/retreieval_lab/cli.py:50)
+- 新增行业化分层结构：`datasets / planners / indexes / retrieval / ranking / qrels / evaluators / experiments / reports / capability`
+- 新增 `retrieval-lab` console script：[pyproject.toml](./pyproject.toml:37)
+- qrels 审计与人工/LLM adjudication merge 已 native 化：[commands.py](./src/retreieval_lab/qrels/commands.py:25)
+- qrels trust / conflict / confidence / merge 服务已 native 化：[service.py](./src/retreieval_lab/qrels/service.py:130)
+- nDCG / ERR / MRR / Judged / Recall-bound 指标已 native 化：[metrics.py](./src/retreieval_lab/evaluators/metrics.py:8)
+- capability cycle / Markdown + SVG 报告已 native 化：[service.py](./src/retreieval_lab/capability/service.py:57)
+- README 已写清楚架构、迁移边界和规则：[README.md](./src/retreieval_lab/README.md:11)
+- 新增测试：[tests/test_retreieval_lab_cli.py](./tests/test_retreieval_lab_cli.py:1)
+
+我参考的范式是：OpenAI Evals 的 eval registry 思路、BEIR/TREC 的 qrels + nDCG/MRR、LangSmith/MLflow 的 experiment tracking，以及 Azure/Pinecone 的 hybrid/RRF + rerank 链路。对应资料： [OpenAI Evals](https://github.com/openai/evals)、[BEIR](https://github.com/beir-cellar/beir)、[LangSmith Evaluation](https://docs.smith.langchain.com/evaluation)、[MLflow GenAI eval](https://mlflow.org/docs/latest/genai/eval-monitor/)、[Azure RRF](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking)、[Pinecone rerank](https://docs.pinecone.io/guides/search/rerank-results)。
+
+验证结果：
+
+- `pytest -q --basetemp .pytest-tmp\retreieval-lab-full-native -p no:cacheprovider`
+- 结果：`147 passed, 1633 warnings`
+- native qrels audit smoke 跑通，当前 qrels：`1244` 条，`qrels_trust_level=low`，因为目前全是 bootstrap-only，冲突率约 `13.5%`
+- native capability report smoke 跑通，生成了 `.tmp\retreieval_lab_native_capability.md` 和 4 个 SVG 图表
+
+目前我对进度的判断：这一步很有价值。它不是只改名，而是把 `mocktesting` 从一个越来越大的实验脚本，拆出了一个更像企业/论文实验平台的骨架。下一轮最值得继续抽的是：`active_qrels_samples`、`build-pooled-qrels`、`evaluate-fuzzy-multirelevance` 这些实验 runner，然后再拆 retrieval/ranking 核心。现在保留 legacy backend 是对的，它还能当 control group。
+
+<details><summary>39 previous messages</summary>
+
+> 我继续按“每轮：计划 → coding → 自检 → 与 `mocktesting` 对照”的节奏推进。上一轮已经把 qrels/capability/evaluator 这些基础设施从旧脚本里抽出来了；这一轮我会优先抽 active qrels sampling 和 pooled qrels 这类实验资产生成能力，它们是飞轮可信度的下一块地基。
+>
+> 先审计边界。我会看 `retreieval_lab` 里剩余的 legacy imports，以及旧脚本中 pooled qrels / active sampler 的实现形状，确保只迁纯数据逻辑，不碰旧检索排序主链路。
+>
+> 审计结果很明确：`retreieval_lab` 只剩 `active_qrels_samples` 还在 service 里委托旧后端；pooled qrels 的纯逻辑还没迁。下一步我会迁这两块纯函数，并在 tests 里和旧实现逐项对照。
+>
+> 旧实现里 pooled qrels 和 active sampler 都是纯 row → qrels/queue 转换，真正慢和复杂的 rank_pooled_runs 仍应暂时留在兼容后端。现在我会把这些纯转换迁到 `retreieval_lab.qrels.service`，这样后续 native runner 可以直接复用。
+>
+> 我还需要带上 `bootstrap_grade` 和 candidate summary 的小辅助函数，否则 active sampler 会继续拉旧模块。只搬这些纯数据函数，不搬 LLM/rerank 客户端。
+>
+> 为了让新包真正独立，我不会从 `mocktesting.mock_retriever` 导入这些 helper。`canonical_stage` 这种小规范化函数可以在新包本地实现一个兼容版本，测试会和旧实现比对。
+>
+> 这一轮会保留一个重要边界：`build-pooled-qrels` / `sample-active-qrels` 的 CLI 仍先透传，因为它们还要跑完整 ranking；但其内部可复用的 qrels pooling / active sampling 逻辑先 native 化。这是迁移复杂系统时更稳的“strangler fig”方式。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/service.py` (+392 -6)
+>
+> </details>
+>
+> 纯转换逻辑已经迁完，`active_qrels_samples` 不再委托旧后端。现在我会更新导出和测试，把 pooled qrels 与 active sampling 都和旧实现做代表性对照。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+10 -0)
+>
+> </details>
+>
+> 导出补上了。接下来在测试里造一个小型多 workflow run_rows，覆盖 target、partial relevance、style risk、rank disagreement 和 low-confidence qrel。
+>
+> 我会把对照测试做得“代表性但不笨重”：只构造两条 query、两个 workflow，足够覆盖 pooling、confidence、rank disagreement、style risk，不跑真实 embedding。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+100 -1)
+>
+> </details>
+>
+> 测试已经补好了。现在跑专门测试和 py_compile，如果和旧实现有细微差异，我会以旧实现为准修正。
+>
+> 专门测试绿了，且 `src/retreieval_lab` 里已经不再直接依赖 `mocktesting.mock_retriever`，只剩 compat 后端和测试里的对照引用。这一轮我再补一个更像实验平台的 native artifact 命令：从已保存的 run rows 直接生成 pooled qrels / active review queue，这样 qrels 层可以独立于 ranking runner 被复用。
+>
+> 我要把“run artifact → qrels/active queue”的能力做成明确 CLI。这样以后 retrieval/ranking 层只负责产出 run rows，qrels 层独立消费，这和 TREC/BEIR 的 run/qrels 分离范式更贴近。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/commands.py` (+135 -0)
+> - Wrote `./src/retreieval_lab/qrels/commands.py` (+1 -0)
+>
+> </details>
+>
+> 命令服务已加好，现在接入 CLI：`qrels pool-from-runs` 和 `qrels sample-active-from-runs` 会完全走新包，不触碰旧后端。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+2 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+37 -1)
+>
+> </details>
+>
+> CLI 已接上。现在我会把 alias、run artifact 输入、qrels 输出和 active queue 输出都纳入测试，这样新命令不是“能导入”，而是真的可用。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+72 -0)
+>
+> </details>
+>
+> 测试补好了。现在跑这一组，看看新 CLI 的真实文件输入输出是否稳定。
+>
+> 新 artifact 命令测试通过。接下来我会更新 README 的迁移状态，把 active sampler 从“委托旧后端”改成“纯转换已 native，完整 ranking runner 仍兼容后端”。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+6 -3)
+>
+> </details>
+>
+> README 已同步。现在我会跑 full suite，同时再扫一次 legacy import 边界，确认这一轮确实把 qrels asset 层抽干净了。
+>
+> 全量测试绿了：`151 passed`。这一轮之后，`src/retreieval_lab` 里对旧脚本的运行时依赖只剩 `compat.py` 一个入口；测试里的旧引用是有意的对照组。下一轮我会补“实验平台骨架”的另一个行业常见块：统一 artifact IO / fingerprint / manifest，避免后续每个 runner 自己拼 JSON 路径和元数据。
+>
+> 这个 artifact 层会很小但很关键：JSON/JSONL 读写、SHA256 指纹、artifact envelope、manifest 写入。它不改变现有实验结果，只让后续 runner 能像 MLflow/LangSmith 那样记录“输入是什么、输出是什么、指纹是什么”。
+>
+> 我会把 artifact 做成独立层并放进 architecture manifest。这样 Retrieval Lab 不只是命令集合，而是有“实验资产生命周期”的概念：run rows、qrels、reports、capability cycles 都能被统一登记和指纹化。
+>
+> <details><summary>Created 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/artifacts/io.py` (+146 -0)
+> - Wrote `./src/retreieval_lab/artifacts/commands.py` (+47 -0)
+>
+> </details>
+>
+> Artifact IO 已建立。接下来把它导出、接进 CLI，并把 architecture manifest 加上 artifacts 层。
+>
+> <details><summary>Edited 3 files</summary>
+>
+> - Wrote `./src/retreieval_lab/artifacts/__init__.py` (+27 -0)
+> - Wrote `./src/retreieval_lab/architecture.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> CLI 也加一个 `artifact manifest` 命令，用于把一次实验涉及的输入/输出登记为可比较资产。这一步是后面做“每轮 cycle 可追溯”的底层拼图。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+18 -0)
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 现在补测试：一个直接测 artifact fingerprint/manifest，一个走 CLI 生成 manifest 文件。然后继续跑全量。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+47 -0)
+>
+> </details>
+>
+> Artifact 测试已经写上。现在跑专门测试和 py_compile，确认新 manifest 命令的指纹、输入输出角色都正常。
+>
+> 专门测试绿了。现在跑全量回归和几个 smoke 命令，确认新增 artifact 层没有影响旧链路。
+>
+> 全量测试再次通过：`153 passed`。新包里的旧运行时依赖只剩 `compat.py`，这是刻意保留的对照入口；测试里的旧引用也都是行为对照。现在我会做一次完成度审计，决定是否还需要继续抽核心 runner，还是本轮先收束并说明下一轮最合理方向。
+>
+> 我不会把目标标成完成：现在平台骨架已经清楚，但核心 retrieval/ranking runner 仍在兼容后端，离“非常满意”还差下一轮 extraction。先把本轮结果整理给你，下一次继续抽 run generation / ranking adapter。
+</details>
+
+本轮继续推进了一轮重构，没有改 `src/mocktesting`，它仍然作为对照组保留。
+
+这轮新增/完善了两块：
+
+1. qrels 资产层 native 化
+   已把 pooled qrels、bootstrap qrels、active qrels sampling 这些纯转换逻辑迁到 Retrieval Lab：
+   [service.py](./src/retreieval_lab/qrels/service.py:169)
+   并新增从已保存 run artifact 直接生成 qrels / active review queue 的 CLI：
+   [commands.py](./src/retreieval_lab/qrels/commands.py:102)
+
+   新命令：
+   ```powershell
+   python -m retreieval_lab qrels pool-from-runs --runs .tmp\run_rows.json
+   python -m retreieval_lab qrels sample-active-from-runs --runs .tmp\run_rows.json --qrels .tmp\pooled_qrels_next.jsonl
+   ```
+
+2. artifact / manifest 基础设施
+   新增统一 JSON/JSONL IO、SHA256 指纹、artifact manifest：
+   [io.py](./src/retreieval_lab/artifacts/io.py:63)
+   并接入 CLI：
+   ```powershell
+   python -m retreieval_lab artifact manifest --inputs .tmp\run_rows.json --outputs .tmp\pooled_qrels_next.jsonl
+   ```
+
+同时更新了 CLI、README、architecture manifest 和测试。现在 `src/retreieval_lab` 对 `mocktesting.mock_retriever` 的运行时依赖只剩 [compat.py](./src/retreieval_lab/compat.py:67)，这是刻意保留的兼容/对照入口；其他旧引用只在测试里用于行为对照。
+
+验证结果：
+
+```text
+153 passed, 1633 warnings
+```
+
+还跑了 smoke：
+
+```text
+python -m retreieval_lab artifact manifest ...
+artifact_count=2, missing_count=0
+```
+
+我还不认为整个目标已经“非常满意”，所以不会标记完成。下一轮最值得抽的是：把 heavy runner 拆成 `run artifact producer`，也就是让 `compare-ranking-workflows / evaluate-fuzzy` 这类命令先产出标准 run rows，再交给现在已经 native 的 qrels/evaluator/artifact/capability 层消费。这样实验平台会真正从“大脚本”变成“可组合流水线”。
+
+<details><summary>20 previous messages</summary>
+
+> 我继续下一轮，这轮目标是把“heavy runner 的输出”标准化成 Retrieval Lab 自己能消费的 run artifact。这样后续 `qrels/evaluators/artifacts/capability` 都不需要知道旧报告长什么样，也为后面逐步替换 ranking runner 铺路。
+>
+> 我先看真实 `.tmp` 报告和旧命令输出结构，不凭记忆写转换器。重点找 `cases`、`workflows`、`top_results`、`ranking_key` 这些字段的实际形状。
+>
+> PowerShell 的正则引号刚才绊了一下，我换成结构化读取 JSON keys。接下来会用 PowerShell 自带 `ConvertFrom-Json` 看顶层字段和几条样本。
+>
+> 真实报告里 fuzzy 系列有完整 `cases`，workflow compare 主要是指标汇总，未必保留每个 workflow 的完整 rows。这个差异很重要：run artifact 标准化器要支持“可提取就提取，不伪造”。我会实现成显式转换命令，缺 rows 时给出清楚错误或空摘要。
+>
+> workflow report不保存 rows，这正好说明为什么需要 run artifact 层：评估 runner 必须明确产出标准 rows，否则后续 qrels/pooling 只能靠猜。现在我会做 `run export`：从带 `cases` 的报告或已有 `run_rows` 文件提取标准 run artifact，并对“没有 rows 的报告”明确记录 skipped。
+>
+> 现在开始写 run artifact 标准化器。它会支持三种输入：已经是 `run_rows` 的文件、带顶层 `cases` 的评估报告、以及 `workflows.<name>.cases` 的多 workflow 报告；没有 rows 的报告会被记录为 skipped，而不是悄悄成功。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/runs.py` (+198 -0)
+>
+> </details>
+>
+> Run artifact service 已经加上。接下来接入 package exports、CLI alias 和帮助文本，再补测试。
+>
+> <details><summary>Edited 3 files</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+12 -1)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+16 -1)
+>
+> </details>
+>
+> CLI 已接入 `run export`。我会把 flywheel guide 也更新一下：先把评估报告导出为 run artifact，再用 qrels pool-from-runs/sample-active-from-runs，这样平台路线更清楚。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+16 -4)
+>
+> </details>
+>
+> Flywheel 已把 run artifact 放进来了。现在补 README 示例和测试。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 测试会覆盖三种情况：顶层 `cases` 报告、`workflows.<name>.cases` 报告，以及无 rows 的 metrics-only 报告。这样转换器不会对旧报告结构产生幻觉。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+89 -0)
+>
+> </details>
+>
+> 测试补完，接下来跑专门测试和 py_compile。如果 run artifact schema 有缺口，马上修。
+>
+> 专门测试已经通过：21 个 Retrieval Lab 测试都绿。现在我做一次真实 smoke：用一个已有 small JSON 报告或构造的测试报告跑 `run export -> qrels pool-from-runs` 链路，再跑全量回归。
+>
+> 这个 smoke 很有用：workflow summary 没有 rows，所以 `run export` 明确 `skipped_report_count=1`，没有假装能生成可池化结果。接下来跑全量测试；之后我会说明这一轮的边界和下一轮该改 legacy runner 输出，让它直接写标准 run artifact。
+>
+> 全量测试绿了：`157 passed`。我再做一个现实性检查：用现有 `.tmp` 的 fuzzy 报告跑 `run export`。如果旧报告不是合法 JSON，我们会把这个作为下一轮需要解决的实验产物质量问题。
+>
+> 好，Python 解析没问题，刚才是 PowerShell `ConvertFrom-Json` 对大文件/转义显示不友好。真实 fuzzy 报告已成功导出标准 run artifact：300 rows、top10 完整。下一步我会用这个 run artifact 跑 qrels pool-from-runs，证明新链路能消费旧报告结果。
+</details>
+
+继续推进了一轮，而且这轮比上一轮更接近“实验平台”本体了：我把 **run artifact** 作为标准中间产物加进来了。
+
+本轮新增：
+
+- `run export`：从已有评估报告里提取标准 `run_rows`
+  [src/retreieval_lab/experiments/runs.py](./src/retreieval_lab/experiments/runs.py:16)
+
+- CLI 接入：
+  ```powershell
+  python -m retreieval_lab run export --reports .tmp\fuzzy_adaptive_test60.json --output .tmp\retrieval_lab\run_rows_from_fuzzy_smoke.json
+  ```
+
+- `qrels pool-from-runs` 现在可以直接消费这个标准 run artifact：
+  ```powershell
+  python -m retreieval_lab qrels pool-from-runs --runs .tmp\retrieval_lab\run_rows_from_fuzzy_smoke.json
+  ```
+
+- Flywheel guide 已更新，把 `run export -> qrels pool-from-runs` 放进循环：
+  [src/retreieval_lab/experiments/flywheel.py](./src/retreieval_lab/experiments/flywheel.py:1)
+
+- 测试覆盖增加到 21 个 Retrieval Lab 专项测试：
+  [tests/test_retreieval_lab_cli.py](./tests/test_retreieval_lab_cli.py:1)
+
+真实 smoke 结果也跑了：
+
+```text
+run export:
+run_count=1
+case_count=300
+row_count=300
+mean_top_results=10.0
+
+qrels pool-from-runs:
+qrels_count=3117
+nDCG@10=0.678144
+MRR@10=0.882865
+Recall@10=0.867526
+qrels_trust_level=low
+```
+
+全量回归：
+
+```text
+157 passed, 1633 warnings
+```
+
+现在的状态我会这样判断：Retrieval Lab 已经有了比较像样的实验平台地基：run artifact、qrels、metrics、artifact manifest、capability cycle 都独立了。还没到“非常满意”，因为 heavy retrieval/ranking runner 仍通过 `compat.py` 走 `mocktesting`。下一轮最该做的是把 legacy runner 的输出路径标准化：让 `eval fuzzy / workflow compare / planner compare` 这类命令原生写出 `run_rows`，这样旧脚本就逐渐退到真正的 baseline/control group 位置。
+
+<details><summary>22 previous messages</summary>
+
+> 我继续下一轮。上一轮已经能从旧报告导出标准 `run_rows`；这轮我会把“运行实验并同时产出标准 run artifact”封装成 Retrieval Lab 自己的桥接 runner。这样 heavy ranking 仍可用旧实现计算，但输出资产由新平台接管，旧包开始真正退到 baseline engine。
+>
+> 先查当前 CLI 与旧命令的输出参数，尤其是哪些命令有 `--output` 且报告里带 `cases`。我会避免改 `mocktesting`，只在新包里做可回滚的桥接层。
+>
+> 我会实现一个通用桥接命令：`run legacy`。它负责调用旧的 `mocktesting` 命令、强制把 JSON 报告写到指定位置、再自动导出标准 `run_rows` 和 artifact manifest。这样旧计算引擎还在，但实验资产进入新平台格式。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/legacy.py` (+118 -0)
+>
+> </details>
+>
+> 桥接服务已写好。现在把它导出并接入 CLI alias。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+8 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> 接下来改 CLI：新增 `run legacy` 参数，支持 `--legacy-command` 和 `--` 后透传旧参数。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+29 -2)
+>
+> </details>
+>
+> CLI 接好了。现在更新 flywheel，让可选的旧 runner 桥接命令成为推荐路径之一，而不破坏已有步骤。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+12 -6)
+>
+> </details>
+>
+> 现在补 README 与测试。测试会用轻量旧命令 `retrieval-flywheel-guide` 验证 bridge 产物和 manifest；再测 `--output` 替换逻辑，避免旧参数重复写错位置。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 测试现在加上桥接层的行为验证。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+46 -0)
+>
+> </details>
+>
+> 我注意到测试里一个小写法可以更干净一点，顺手修掉；然后跑专门测试。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+2 -2)
+>
+> </details>
+>
+> 现在跑 py_compile 和 Retrieval Lab 专项测试；如果桥接命令输出字段和预想不一致，我会以真实输出修正。
+>
+> 专项测试通过：桥接 runner 可跑旧命令、写旧报告、再写新 run artifact 和 manifest。现在做真实 smoke，并跑全量回归。
+>
+> smoke 正常。桥接命令对于没有 ranked rows 的旧报告会标记 skipped；对于 fuzzy 这类有 `cases` 的报告会导出 rows。现在跑一次便宜的真实 fuzzy bridge 小样本，确认它能直接产出非空 run artifact。
+>
+> 这个小样本 bridge 已经产出非空 run artifact：1 个 run、5 行。接下来用它跑一次 `qrels pool-from-runs`，证明新资产链路直接可接。
+>
+> 桥接链路已经闭环：legacy ranking → Retrieval Lab run artifact → native qrels/metrics。现在跑全量回归，确认没有伤到既有行为。
+>
+> 全量测试通过：`159 passed`。现在状态是：新包对旧包的运行时依赖只剩两个明确入口，`compat.py` 和 `experiments/legacy.py`，都属于有意保留的对照/桥接层。下一轮如果继续深入，就该开始抽 retrieval/ranking 的数据模型与纯 scorer。
+</details>
+
+继续完成了一轮，这轮把“旧计算引擎”和“新实验资产平台”真正接起来了。
+
+新增的是 **legacy runner bridge**：
+
+- 新文件：[src/retreieval_lab/experiments/legacy.py](./src/retreieval_lab/experiments/legacy.py:1)
+- 新命令：
+  ```powershell
+  python -m retreieval_lab run legacy --legacy-command validate-fuzzy-understanding --report-output .tmp\report.json --run-output .tmp\runs.json --manifest-output .tmp\manifest.json -- --split test --limit 1 --query-planner multi_query
+  ```
+
+它会做三件事：
+
+1. 调用 `mocktesting.mock_retriever` 作为旧计算引擎。
+2. 把旧报告写到指定 `report-output`。
+3. 自动导出 Retrieval Lab 标准 `run_rows`，并生成 artifact manifest。
+
+真实 smoke 已跑通：
+
+```text
+legacy_command=validate-fuzzy-understanding
+run_count=1
+row_count=5
+skipped_report_count=0
+legacy_returncode=0
+```
+
+然后用这个 run artifact 接上 native qrels/metrics：
+
+```text
+qrels_count=51
+nDCG@10=0.711926
+MRR@10=0.8
+Recall@10=0.8
+qrels_trust_level=low
+```
+
+也覆盖了 metrics-only 报告：如果旧报告没有 ranked rows，它会明确标记 `skipped_report_count=1`，不会假装生成了可用 run artifact。
+
+测试结果：
+
+```text
+159 passed, 1633 warnings
+```
+
+当前我对进度的判断：已经很接近一个清晰的 Retrieval Lab 了。现在 `src/retreieval_lab` 对旧系统的运行时依赖只剩两个明确入口：
+
+- [compat.py](./src/retreieval_lab/compat.py:1)：普通兼容透传
+- [legacy.py](./src/retreieval_lab/experiments/legacy.py:1)：旧计算引擎桥接，但输出资产由新平台接管
+
+还没有到“非常满意”，因为 retrieval/ranking 的纯 scorer、prepared index、workflow runner 还没从 `mocktesting` 抽出来。下一轮我会开始抽数据模型和纯 scoring/ranking 层，先不碰 embedding/IO，继续用旧结果做对照。
+
+<details><summary>24 previous messages</summary>
+
+> 我继续下一轮。现在桥接层已经能把旧 ranking 结果变成标准 run artifact，这轮我会抽一个更核心但仍安全的纯模块：`ranking/rerank`。先做 run artifact 上的 rule rerank / qrels oracle rerank，不碰 embedding、不碰索引，这样可以和 `mocktesting` 的纯函数逐项对照。
+>
+> 先读旧 rerank 纯函数和新包当前结构，确认我只搬可复用的 row transformation，不把旧实验 runner 的复杂依赖带进来。
+>
+> 旧函数边界很干净：rule rerank、qrels oracle rerank、row_with_reranked_results 都是纯 row/list 变换。现在我会把这块迁到 `retreieval_lab.ranking`，并提供 `run rerank` 命令，让标准 run artifact 可以直接被重新排序。
+>
+> 我会把 rerank 输出也保持为标准 run artifact：输入是 `run_rows`，输出还是 `run_rows`，只是 run 名和每行 `ranking_key` 变成 `rule_rerank@N` 或 `qrels_oracle_rerank@N`。这会让 qrels、metrics、capability 不需要知道 rerank 是怎么做的。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/rerank.py` (+192 -0)
+>
+> </details>
+>
+> Ranking rerank 服务已加入。现在导出它并接入 CLI：`run rerank --method rule|qrels_oracle`。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/__init__.py` (+20 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> 接下来改 CLI。注意这个命令完全 native，不经过旧后端。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+19 -1)
+>
+> </details>
+>
+> 现在补文档与测试。测试会把 native rerank 和 `mocktesting` 的纯函数直接比对，然后跑 CLI 产物。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 我会在测试里构造一个能被 rule rerank 明显翻转的例子：高分但命中 negative_style 的候选会被压下去，较低分但无风险的候选会上来。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+116 -1)
+>
+> </details>
+>
+> 测试已加。现在跑 py_compile 和专项测试，如果 native rerank 和旧函数有差异，我会立刻按旧实现修正。
+>
+> 测试文件插入位置把一个字典闭合打断了，我会修正测试结构，然后重跑。
+>
+> 问题确认了：`representative_rerank_row` 插进了 `representative_run_rows` 的字典中间。我会重写这两个 fixture 函数，保持测试样本清晰。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+35 -35)
+>
+> </details>
+>
+> Fixture 已修正。现在重新跑专项测试。
+>
+> 专项测试通过：native rule/qrels rerank 和旧函数对照一致，CLI 也能输出标准 reranked run artifact。接下来跑真实 smoke：用上一轮 fuzzy run artifact 做 rule rerank，再用 qrels oracle 做一次小验证。
+>
+> smoke 通过，rerank 输出仍是标准 run artifact，可以继续接 qrels/evaluator。现在跑全量回归，确认本轮没有影响其他功能。
+>
+> 全量测试绿了：`163 passed`。我顺手把 flywheel guide 也补上 `run rerank` 步骤，让新 rerank 能力进入推荐实验循环，而不是只停留在命令层。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+10 -4)
+>
+> </details>
+>
+> Flywheel 已更新。我再跑一次轻量专项，确保 guide 步数和命令文本都正常。
+>
+> 专项测试和 guide smoke 正常。到这里本轮收束：native ranking/rerank 层已经可用，并且仍然和旧纯函数对齐。
+</details>
+
+这一轮抽出了第一块真正的 native ranking 能力：**run artifact rerank**。
+
+新增内容：
+
+- 原生 rerank 服务：
+  [src/retreieval_lab/ranking/rerank.py](./src/retreieval_lab/ranking/rerank.py:1)
+
+- 导出到 ranking 包：
+  [src/retreieval_lab/ranking/__init__.py](./src/retreieval_lab/ranking/__init__.py:1)
+
+- 新 CLI：
+  ```powershell
+  python -m retreieval_lab run rerank --runs .tmp\retrieval_lab\run_rows_next.json --method rule
+  python -m retreieval_lab run rerank --runs .tmp\retrieval_lab\run_rows_next.json --method qrels_oracle --qrels .tmp\pooled_qrels_next.jsonl
+  ```
+
+支持两种方法：
+
+- `rule`：复刻旧 `rule_rerank_score`
+- `qrels_oracle`：用 qrels 做 oracle upper-bound rerank
+
+已经和 `mocktesting` 的纯函数做了对照测试：
+
+- `rerank_row_by_rule`
+- `rerank_row_by_qrels`
+
+真实 smoke 也跑了：
+
+```text
+rule rerank:
+run_count=1
+row_count=5
+ranking_key_counts={"rule_rerank@10": 5}
+
+qrels oracle rerank:
+run_count=1
+row_count=5
+ranking_key_counts={"qrels_oracle_rerank@10": 5}
+```
+
+验证：
+
+```text
+专项测试：27 passed
+全量回归：163 passed, 1633 warnings
+```
+
+最后我也把 `run rerank` 放进了 Retrieval Lab flywheel guide：
+[src/retreieval_lab/experiments/flywheel.py](./src/retreieval_lab/experiments/flywheel.py:1)
+
+现在的结构更满意了一些：`run export -> qrels pool -> run rerank -> metrics/capability` 这条实验资产链已经基本成型。还没到“非常满意”，下一轮建议抽 **workflow scorer/index adapter**：先把 `semantic/lexical/constraint/signature` 这些 score 信号的结构定义和组合逻辑搬出来，再逐步替代 legacy runner。
+
+<details><summary>25 previous messages</summary>
+
+> 我继续下一轮。这次我会抽“workflow score signal / score composition”这一层：不碰 embedding 和索引，只把已经存在于 `top_results` 里的 `embedding_score / lexical_score / rrf_score / constraint_score / signature_score` 组合成可解释的排序键。这样 Retrieval Lab 可以在标准 run artifact 上做 workflow 对比，而不用每次回到旧 runner。
+>
+> 我先读旧排序键实现和当前 ranking 包，确认哪些 key 可以只靠 run artifact 里的字段复现。不能复现的部分会明确留在 legacy bridge，不做半吊子迁移。
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先接着上一轮的迁移工作往下走：先看 `retreieval_lab` 当前结构和未完成的 workflow/ranking 抽取点，再做一轮小而稳的 native 能力补齐。`mocktesting` 我会继续当作基线，不去改它。
+>
+> 现在的包已经是“并行实验室”形态了：CLI、qrels、run artifact、能力周期、legacy bridge 都有了。下一步我会把 workflow 排序从报告字段里抽成独立能力，这样实验平台可以在不重跑旧 `mocktesting` 的情况下复排已有 run artifact。
+>
+> 我看完现状后，这一轮会做三件事：新增 `ranking.workflow` 原生复排模块、把 CLI 接进 `run workflow-rerank`，再用单测和一个小烟测确认它能读写标准 run artifact。这样它从“桥接旧命令”再往“实验平台自己会操作实验结果”前进一步。
+>
+> 这里有个取舍：`mocktesting` 里的 fast path 会重新计算 BM25/RRF/constraint/signature；而 run artifact 里通常已经带着这些分数字段。所以新的 workflow 复排会只消费已有字段，字段不足时给出清楚错误或退回已有 `score`，避免把实验平台又绑回那套昂贵计算。
+>
+> <details><summary>Searched web 6 times</summary>
+>
+> <details><summary>Searched web 6 times</summary>
+>
+> - Searched web for `OpenAI Evals framework registry samples evals GitHub`
+> - Searched web for `site:github.com/openai/evals OpenAI Evals registry evals README`
+> - Searched web for `OpenAI Evals GitHub registry evals`
+> - Searched web for `https://github.com/openai/evals`
+> - Searched web for `https://docs.smith.langchain.com/evaluation`
+> - Searched web for `'Easy to use, evaluate your models across' in https://github.com/beir-cellar/beir`
+>
+> </details>
+>
+> </details>
+>
+> 准备动文件了：我会新增一个纯函数式 workflow 复排模块，并只在 `retreieval_lab` 里接线。核心原则是“可复现、可解释、只读旧结果”，不碰 legacy 的生成逻辑。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/workflow.py` (+243 -0)
+>
+> </details>
+>
+> `workflow.py` 已经加上了。它现在能处理 semantic、lexical、RRF、constraints、signature、adaptive signature，以及 forbidden stage veto；同时把每个结果的 score components 写回，后续失败归因和报告会更容易追。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/__init__.py` (+16 -0)
+>
+> </details>
+>
+> 接下来接 CLI：我会把新能力放在 `run workflow-rerank`，和已有 `run rerank` 并列。这样用户的心智很清楚：一个是 reranker，对候选做判断式重排；一个是 workflow，用实验分数字段复排。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> CLI alias 已加，接下来把 parser 和 native dispatch 接进去，并补帮助文案。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+23 -2)
+>
+> </details>
+>
+> 现在补测试。我会覆盖两个层面：纯函数的排序公式、CLI 读写标准 run artifact。重点不是追求大样本，而是防止以后 workflow 复排字段漂移。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+62 -1)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+60 -0)
+>
+> </details>
+>
+> 测试补上了。我先跑 `retreieval_lab` 的聚焦测试，看看新模块在当前环境里有没有字段假设错误。
+>
+> 聚焦测试过了，30 个都稳。接下来我做一个 CLI 烟测，再跑全量测试，确认这轮抽取没有影响旧命令兼容。
+>
+> CLI 烟测也正常，别名和架构 manifest 都能看到新能力。现在跑全量测试；如果这里过，说明并行子项目这轮没有踩到已有 mocktesting 回归。
+>
+> 全量测试过了：166 passed。这个结果很好，说明 `retreieval_lab` 的新增原生 workflow 复排没有破坏旧检索、视频分析、CLI 这些边界。
+>
+> README 目前已经把行业范式和迁移规则写进去了，我会顺手补上这轮新增的 `workflow-rerank` 示例和 native 能力说明，避免“代码有了但入口文档没跟上”。
+>
+> <details><summary>Edited 1 file, searched web 5 times</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> <details><summary>Searched web 5 times</summary>
+>
+> - Searched web for `OpenAI Evals GitHub evals registry docs`
+> - Searched web for `OpenAI Evals GitHub run evals registry samples official`
+> - Searched web for `https://github.com/openai/evals`
+> - Searched web for `https://docs.langchain.com/langsmith/evaluation-concepts`
+> - Searched web for `https://arxiv.org/abs/2104.08663`
+>
+> </details>
+>
+> </details>
+>
+> 我再做一个轻量的帮助/入口检查，确认用户实际敲命令时能发现这个新入口。之后我会给你一个简短的阶段汇总和下一轮建议。
+</details>
+
+已经继续推进了这轮重构，方向我认为是对的：把 `src/mocktesting` 保留为基线，把新的“检索实验平台”放到并行包 [src/retreieval_lab](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/README.md)，产品名叫 **Retrieval Lab / 检索实验平台**。
+
+这轮新增了一个原生 workflow 复排层：
+
+- 新增 [workflow.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/ranking/workflow.py)
+- 接入 CLI：`python -m retreieval_lab run workflow-rerank ...`
+- 支持 `semantic_only / lexical_only / hybrid_rrf / hybrid_rrf_constraints / signature_only / adaptive_signature` 等 ranking key
+- 只消费已有 run artifact 字段，不重跑昂贵检索，适合做快速离线复排实验
+- 结果会带 `workflow_score_components`，方便后续失败归因和能力报告溯源
+
+我也补了入口和文档：
+
+- [cli.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/cli.py)
+- [compat.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/compat.py)
+- [README.md](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/README.md)
+- [test_retreieval_lab_cli.py](/D:/WorkSpace/Codex/SceneWeaver/tests/test_retreieval_lab_cli.py)
+
+验证结果：
+
+```text
+pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-workflow -p no:cacheprovider
+30 passed
+
+pytest -q --basetemp .pytest-tmp\retreieval-lab-full-workflow -p no:cacheprovider
+166 passed
+```
+
+我查到并采用的范式主要是：OpenAI Evals 的 eval/registry 思路、BEIR/TREC 的 qrels + graded metrics、MLflow/LangSmith 的 run artifact 与实验追踪、Azure/Pinecone 的 hybrid/RRF/two-stage rerank。参考入口：
+[OpenAI Evals](https://github.com/openai/evals), [BEIR](https://arxiv.org/abs/2104.08663), [Azure Hybrid RRF](https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking), [LangSmith Evaluation](https://docs.langchain.com/langsmith/evaluation-concepts), [MLflow Tracking](https://mlflow.org/docs/latest/tracking.html)。
+
+下一步最值得做的是继续把 `mocktesting` 里“重计算型”的稳定逻辑逐步迁成 `retreieval_lab` 原生服务，优先顺序我建议是：native failure attribution → native experiment comparison → native report generation。现在平台骨架已经比较像一个实验系统了。
+
+<details><summary>45 previous messages</summary>
+
+> 我继续按“每轮计划 → coding → 自检 → 和 `mocktesting` 对照”的节奏推进。这轮我会优先抽一个能提升实验平台成熟度的模块：原生 failure attribution，让 `retreieval_lab` 可以基于已有 run artifact 和 qrels 自己解释失败，而不只是桥接旧命令。
+>
+> 旧 `mocktesting` 的 failure attribution 是和 fast index/signals 绑在一起的，能拿到 target 的完整候选池分数。`retreieval_lab` 这边更适合做“artifact-first”的版本：基于已有 run rows、top_results、qrels 和 workflow score components 做归因，这更贴近实验平台范式，也避免重新计算大索引。
+>
+> 我会把它设计成 `run analyze-failures`，因为输入是标准 run artifact，不是重新跑数据集。可选 `--qrels` 时会额外判断“多解/弱标签/标注缺失”，没有 qrels 时仍能根据 target rank、constraint hits、style hits 和 score components 归因。
+>
+> 准备修改文件：新增 `evaluators.failures`，接入 CLI/alias/export，再补一组和 legacy 分类逻辑对齐的代表性测试。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/failures.py` (+322 -0)
+>
+> </details>
+>
+> 原生 failure attribution 模块已经加上。它比旧版少依赖实时 index，但多了 artifact/qrels 视角：能把失败拆成候选召回、融合排序、约束、风格风险、模糊多解、弱标签等类型，并给下一步动作建议。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/__init__.py` (+20 -1)
+>
+> </details>
+>
+> 现在接命令层：我会加 `run analyze-failures`，让它从 `.tmp\retrieval_lab\run_rows_next.json` 这类 artifact 直接产出失败分析报告。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+24 -1)
+>
+> </details>
+>
+> 命令入口接好了。我再给 Markdown 报告加一个失败样本表，这样 `--markdown-output` 产物可以直接被放进 cycle 归档里看。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+28 -0)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+13 -1)
+>
+> </details>
+>
+> 测试会覆盖三类情况：native 分类与 legacy 分类在代表条件下保持一致、qrels 能识别“多解不是失败能力不足”、CLI 能写 JSON 和 Markdown。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+56 -0)
+>
+> </details>
+>
+> 我会再补一点测试 fixture，让失败归因覆盖 style risk、fusion、candidate recall 和 ambiguous qrels 四个最重要路径。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+99 -0)
+>
+> </details>
+>
+> 有一个小细节：如果没有 qrels，只靠 stage/purpose 相同来判“多解”会太宽。我会让测试里的 fusion case 明确是排序问题，不把它伪装成多解。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+8 -2)
+>
+> </details>
+>
+> 接下来更新 README，把新的 failure analysis 放到“当前迁移状态”和命令示例里。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 代码和测试都补好了，我先跑聚焦测试；这里如果有问题，大概率是 failure type 的边界条件或 CLI 输出字段。
+>
+> 聚焦测试暴露了一个普通导出问题：`result_stage` 在 qrels service 里有，但 facade 没导出。我会补 facade export，然后重跑。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/qrels/__init__.py` (+2 -0)
+>
+> </details>
+>
+> 聚焦测试过了：33 passed。现在我跑一个 CLI 烟测和全量测试，确保新命令真的可用，且没有影响其它包。
+>
+> 命令帮助和 alias 表都正常。全量测试我现在跑一遍，这是这一轮真正的回归门。
+>
+> 全量回归通过：169 passed。这个阶段已经完成，但我还不认为整个大目标“非常满意”已经到终点；下一轮我会补一个实验平台非常关键的模块：原生 experiment comparison，用来比较多个报告/能力周期，而不是只生成单份报告。
+>
+> 现在做第二个小迭代：experiment comparison。这个模块的价值是把每轮实验报告变成可排序、可对比的 evidence，而不是靠人眼翻 JSON。
+>
+> 旧 `compare-experiments` 基本只是把报告收集起来，没有真正排序或 delta。新的 native 版本我会保留它的核心兼容字段（report_count、methods），同时增加 best report、baseline delta、metric table，作为实验平台的对比面板。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/compare.py` (+171 -0)
+>
+> </details>
+>
+> 原生 compare 模块已加：它会抽取 report 里的 summary/metrics/graded_metrics/fuzzy_metrics/capability scores，计算统一 selection score，并给出相对 baseline 的关键指标 delta。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+10 -0)
+>
+> </details>
+>
+> 现在把 `compare-experiments` 从兼容桥升级成 native 路由，同时保留 `experiment compare` 这个现代入口。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+21 -0)
+>
+> </details>
+>
+> 再把 Markdown generic reporter 补一个 experiment comparison 表，方便直接看 best report 和 delta。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+26 -0)
+>
+> </details>
+>
+> 文档也跟上，把 experiment comparison 纳入当前 native 能力和示例命令。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 补测试：一个测 metrics 抽取和 score，一个测 CLI 产物，还有一个把 core 字段和 legacy `compare_experiments_command` 对齐。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+2 -0)
+>
+> </details>
+>
+> 继续补 comparison 的具体断言，确保它不只是“收集报告”，而是真的能排序和算 delta。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+65 -0)
+>
+> </details>
+>
+> 实验比较模块已接入并有 legacy 对照测试。现在跑聚焦测试；如果这里过，再全量验证一次。
+>
+> 聚焦测试继续通过：35 passed。现在全量测试，这轮目标是保证 native failure + native compare 两个模块都没有影响现有系统。
+>
+> 两个新 CLI 入口都能正常展示。全量测试开始。
+>
+> 全量回归通过：171 passed。到这里这一轮迁移质量不错：`retreieval_lab` 已经不只是 façade，能原生做 run 复排、失败归因、实验对比、qrels、capability cycle。ನಾನು再做一次状态检查，确认没有误改 `src/mocktesting`。
+>
+> 我刚才那句夹了一个非中文词，手滑了，意思是“我再做一次状态检查”。继续收尾这一轮证据。
+</details>
+
+**本轮进展**
+
+继续按你的要求，没有改 [src/mocktesting](/D:/WorkSpace/Codex/SceneWeaver/src/mocktesting)，只扩展并行子项目 [src/retreieval_lab](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/README.md)。
+
+这轮完成了两个 native 模块：
+
+1. 原生失败归因
+   新增 [failures.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/evaluators/failures.py)，支持从 run artifact + 可选 qrels 分析：
+   `candidate_recall_failure`、`fusion_ranking_failure`、`constraint_failure`、`style_risk_miss`、`ambiguous_multi_valid_answer`、`weak_target_label` 等。
+
+   新命令：
+   ```powershell
+   python -m retreieval_lab run analyze-failures --runs .tmp\retrieval_lab\run_rows_next.json --qrels .tmp\pooled_qrels_next.jsonl --markdown-output .tmp\retrieval_lab\failures.md
+   ```
+
+2. 原生实验对比
+   新增 [compare.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/experiments/compare.py)，可以读取多个 JSON 报告，抽取 `nDCG@10 / MRR@10 / recall / style_violation / failure_rate / capability score`，计算 best report 和 delta。
+
+   新命令：
+   ```powershell
+   python -m retreieval_lab experiment compare --reports .tmp\fuzzy_multi_next.json .tmp\strong_baselines_next.json --markdown-output .tmp\retrieval_lab\experiment_compare.md
+   ```
+
+**验证结果**
+
+已跑完：
+
+```text
+pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-compare -p no:cacheprovider
+35 passed
+
+pytest -q --basetemp .pytest-tmp\retreieval-lab-full-compare -p no:cacheprovider
+171 passed
+```
+
+也确认了：
+
+- `src/mocktesting` 无 diff
+- `python -m retreieval_lab run analyze-failures --help` 正常
+- `python -m retreieval_lab experiment compare --help` 正常
+- `python -m retreieval_lab commands` 能看到新 alias
+
+**当前判断**
+
+`retreieval_lab` 已经从“兼容 façade”推进到“可独立操作实验资产”的阶段了：现在它能原生做 qrels、run artifact、workflow 复排、rerank、失败归因、实验对比、能力周期报告。
+
+但我还不认为“非常满意”的终点到了。下一轮最值得继续迁的是：native report generation / eval report 汇总，把现在散落的 JSON、Markdown、cycle、comparison 合成一个更稳定的实验报告层。这样每次 cycle 就可以自动产出“本轮做了什么、提升了什么、失败在哪、下一步跑什么”。
+
+<details><summary>47 previous messages</summary>
+
+> 我继续推进下一轮。上一轮已经让 `retreieval_lab` 能原生做失败归因和实验对比；这一轮我会补“统一报告汇总”层，让实验平台可以把 qrels、failure、comparison、capability 等报告汇成一份人读 Markdown，而不是继续依赖 `mocktesting generate-eval-report`。
+>
+> 准备动文件了：我会新增 `reports/eval_report.py`，它负责“多报告汇总 → Markdown”，然后把 `generate-eval-report` 从 legacy passthrough 升级为 native 命令。为了兼容已有习惯，仍支持 `--input ... --output ...`。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/eval_report.py` (+403 -0)
+>
+> </details>
+>
+> 新报告模块先落地了。我发现两个小边界要马上收紧：默认 `--input` 不能误读当前目录，selection score 也要写进 metrics 方便报告展示。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/eval_report.py` (+9 -6)
+>
+> </details>
+>
+> 现在把新命令导出并接到 CLI。`generate-eval-report` 会变成 native，但 `src/mocktesting` 自己的命令完全不变。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/__init__.py` (+14 -1)
+>
+> </details>
+>
+> CLI 接线会保持两个入口：`python -m retreieval_lab generate-eval-report --input ...` 和 `python -m retreieval_lab report eval --input ...`。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+20 -1)
+>
+> </details>
+>
+> 我会把 `--input` parser 默认改成 `None`，由命令内部统一 fallback。这样用户用 `--inputs a b c` 时不会额外把默认报告混进去。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+1 -1)
+>
+> </details>
+>
+> 现在补测试：一个覆盖 `report eval` alias，一个用 workflow 报告和 legacy Markdown 对照核心章节，一个测试多输入汇总。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+1 -0)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+73 -0)
+>
+> </details>
+>
+> 报告测试已补；文档也要跟上，让 flywheel 最后可以一条命令汇总多个报告。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 还要把新报告命令加入 flywheel guide，这样一轮实验自然闭环到“统一报告”。
+>
+> 当前 guide 里 failure 还是走 `eval failures` 兼容路径。我会加 native `run analyze-failures`、`experiment compare`、`report eval`，让飞轮更贴近现在的实验平台能力。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+22 -4)
+>
+> </details>
+>
+> 再收紧一个健壮性边界：有些 report 的 `summary` 未必是 dict，读取 elapsed 时不能假设。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/eval_report.py` (+8 -1)
+>
+> </details>
+>
+> 实现和文档都接好了，现在跑聚焦测试。这里会验证 native eval report、legacy Markdown 核心章节对照、多输入汇总和飞轮 guide。
+>
+> 聚焦测试通过：37 passed。接下来做 CLI 烟测和全量回归，确认 `generate-eval-report` native 化没有影响其它路径。
+>
+> 烟测正常，flywheel 已经变成 16 步，并把 native analyze-failures、experiment compare、report eval 放进闭环。现在跑全量测试。
+>
+> 全量通过：173 passed。接下来我做一次当前成熟度审计，确认哪些核心要求已经有证据，哪些还不足以宣称“非常满意”。如果还差关键层，我会继续下一轮。
+>
+> 当前检查确认 `src/mocktesting` 没有任何 diff。测试运行在新包里生成了一些 `__pycache__`，不过这类通常被 `.gitignore` 忽略；我先确认忽略规则，不贸然清理文件。
+>
+> 我不把目标标成完成，因为还有一个关键实验平台能力缺口：保存好的 run artifact 还不能被 `retreieval_lab` 原生用 qrels 重新评估。下一轮我会补 `run evaluate`，这是 TREC/BEIR/MLflow 风格实验系统的核心动作：一个 run 文件 + 一个 qrels 文件 → 可复现 metrics 和 best run。
+>
+> 开始实现 `run evaluate`：它不会重跑检索，只读标准 run artifact 和 qrels，输出每个 run 的 nDCG/ERR/MRR/Judged/Recall，并选出当前最佳 run。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/run_eval.py` (+153 -0)
+>
+> </details>
+>
+> 评估模块已加。接下来导出 facade、接 CLI alias 和 Markdown 表。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/__init__.py` (+10 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+2 -0)
+>
+> </details>
+>
+> CLI 会提供两个入口：`run evaluate` 更符合 artifact-first，`eval runs` 给评估分组保留入口。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+28 -2)
+>
+> </details>
+>
+> 现在让 generic Markdown report 能展示 run_metrics 表，这样 `--markdown-output` 不是裸 summary。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+31 -0)
+>
+> </details>
+>
+> 更新 README 和 flywheel，把 `run evaluate` 放在 rerank 之后，形成“复排 → 原生评估 → 失败分析 → 对比 → 汇总”的闭环。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+14 -8)
+>
+> </details>
+>
+> 接下来补测试：验证 run evaluation 与 legacy `graded_metrics` 一致，CLI 写 JSON/Markdown，alias 可达。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+4 -0)
+>
+> </details>
+>
+> 我会把 run evaluation 测试放在 workflow/rerank 附近，使用现有 representative run rows，保证结果稳定。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+57 -0)
+>
+> </details>
+>
+> 我会让 run evaluation 报告把 best run 的 metrics 也放到顶层 `graded_metrics`，这样 experiment compare 和 eval report 能像处理 legacy 评估报告一样处理它。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/evaluators/run_eval.py` (+1 -0)
+>
+> </details>
+>
+> 现在跑聚焦测试；这轮应该能确认 native run evaluation、Markdown 输出、legacy metric 对齐。
+>
+> 聚焦测试通过：39 passed。继续做 CLI 烟测和全量回归。
+>
+> 烟测正常，flywheel 已更新到 17 步。现在跑全量测试。
+>
+> 全量回归通过：175 passed。这个阶段的实验平台闭环已经很完整了；我做最后一轮严格审计，看是否可以合理认为“非常满意”，还是还差必须补的基础设施。
+>
+> 我做完审计后，现在可以比较有底气地说：作为“检索实验平台”的第一版重构，我已经满意了。它不是把所有重计算检索都迁走，而是把行业实验平台该有的资产层、评估层、报告层、周期层先独立成型，并把 `mocktesting` 保留为对照组。
+</details>
+
+完成了。我现在认为 `src/retreieval_lab` 已经可以作为“检索实验平台 / Retrieval Lab”的第一版满意重构。
+
+这次没有改 [src/mocktesting](/D:/WorkSpace/Codex/SceneWeaver/src/mocktesting)，它仍然是对照组。新增的 [src/retreieval_lab](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/README.md) 已经具备独立实验平台骨架：
+
+- CLI：`python -m retreieval_lab ...`
+- qrels：审计、pool、active sampling、merge adjudication
+- run artifacts：导出、legacy bridge、manifest、fingerprint
+- ranking：rule rerank、qrels oracle rerank、workflow rerank
+- evaluation：graded metrics、run artifact evaluation、failure attribution
+- experiments：experiment compare、flywheel guide
+- reports：eval Markdown、capability Markdown + SVG charts
+- capability cycles：记录每轮能力变化、delta、瓶颈和下一步建议
+
+新增或完善的代表命令：
+
+```powershell
+python -m retreieval_lab run evaluate --runs .tmp\retrieval_lab\run_rows_next.json --qrels .tmp\pooled_qrels_next.jsonl
+python -m retreieval_lab run analyze-failures --runs .tmp\retrieval_lab\run_rows_next.json --qrels .tmp\pooled_qrels_next.jsonl
+python -m retreieval_lab experiment compare --reports a.json b.json
+python -m retreieval_lab report eval --inputs a.json b.json --output .tmp\retrieval_lab\eval_report.md
+python -m retreieval_lab flywheel guide
+```
+
+最终自检：
+
+```text
+pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-run-eval -p no:cacheprovider
+39 passed
+
+pytest -q --basetemp .pytest-tmp\retreieval-lab-full-run-eval -p no:cacheprovider
+175 passed
+```
+
+并确认：
+
+- `src/mocktesting` 无 diff
+- `python -m retreieval_lab commands` 正常
+- `python -m retreieval_lab flywheel guide` 正常，当前 17 步闭环
+- 多处测试与 `mocktesting` 的 qrels、metrics、rerank、failure classifier、Markdown 核心章节做了对照
+
+目标已标记完成。最终用量：约 1,676,918 tokens，耗时约 1 小时 25 分钟。
+
+> mocktesting中的infra是否都迁移或重构了？总之infra我希望越多越好，这意味着灵活性与完备性。
+
+<details><summary>18 previous messages</summary>
+
+> 我先做一个覆盖度审计，不凭记忆回答：对比 `mocktesting` 的命令、核心函数和 `retreieval_lab` 的 native/compat 状态，看看哪些已经迁了、哪些只是桥接、哪些还值得继续抽。
+>
+> 结论先说一句：没有，`mocktesting` 的 infra 还没有全部迁移。现在迁的是“实验资产与评估闭环”这一层；重计算的检索生成、planner/index/search/压力测试矩阵仍主要走兼容桥。你说 infra 越多越好这个判断我同意，所以我顺手补一个“infra 覆盖度审计”命令，让这个问题以后可以机器化追踪。
+>
+> 这个审计命令会输出三类：native 已迁、compat 仍桥接、empty layer 空层/待建设。它不是功能替代，但很像企业实验平台里的 maturity matrix，可以防止我们凭感觉说“迁完了”。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+192 -0)
+>
+> </details>
+>
+> 审计模块已加，接下来接 `infra audit` CLI 和 Markdown 表。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+6 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> 现在接入 CLI native dispatch。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+20 -0)
+>
+> </details>
+>
+> 再让 Markdown reporter 能展示 coverage 表，方便直接打开看哪些没迁。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+35 -0)
+>
+> </details>
+>
+> 补 README 和测试。测试会验证：覆盖率报告确实指出还有 compat-only 和 empty layers，这正好回答你的问题。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+2 -0)
+>
+> </details>
+>
+> 现在补单测。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+1 -0)
+>
+> </details>
+>
+> 我会在测试末尾加一个 CLI smoke，确认报告里有 `compat_only_legacy_command_count` 和空层提示。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+15 -0)
+>
+> </details>
+>
+> 跑聚焦测试，确认新的审计命令可用。
+>
+> 聚焦测试通过。再跑一次 `infra audit` 看真实数值，然后给你一个明确覆盖判断。
+</details>
+
+没有全部迁移。现在更准确地说是：**核心实验资产 infra 已经迁了一批，但 `mocktesting` 里的重计算检索/生成/压力测试类 infra 仍大量通过 compatibility backend 跑**。
+
+我刚补了一个机器化覆盖度审计命令，避免以后靠感觉判断：
+
+```powershell
+python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_latest.json --markdown-output .tmp\retrieval_lab\infra_audit_latest.md
+```
+
+当前审计结果：
+
+```text
+legacy_command_count: 35
+native_command_count: 16
+fully_native_legacy_command_count: 7
+partially_native_legacy_command_count: 4
+compat_only_legacy_command_count: 24
+empty_layer_count: 6
+coverage_rate: 0.25
+```
+
+也就是说，**不是都迁了**。已经比较完整的是 qrels、run artifact、metrics、rerank、workflow rerank、run evaluation、failure attribution、experiment compare、capability cycle、reporting、artifact manifest 这一层。还明显缺的是：
+
+- `datasets`: case registry / split manifest / fixture inventory
+- `planners`: native query understanding planner registry/cache
+- `indexes`: native prepared index/cache metadata
+- `retrieval`: native search/recall workflow
+- `llm`: optional LLM/fake client adapter
+- `fixtures`: fixture registry
+
+新增文件主要是 [coverage.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/experiments/coverage.py)，并接入了 [cli.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/cli.py)、[README.md](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/README.md)、[markdown.py](/D:/WorkSpace/Codex/SceneWeaver/src/retreieval_lab/reports/markdown.py)。
+
+验证：
+
+```text
+pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-infra-audit -p no:cacheprovider
+40 passed
+
+pytest -q --basetemp .pytest-tmp\retreieval-lab-full-infra-audit -p no:cacheprovider
+176 passed
+```
+
+我的判断：你说“infra 越多越好”是对的。下一轮最值得补的是 `datasets + planners + indexes/retrieval` 三块，因为它们决定这个平台能不能从“评估已有结果”升级成“独立组织实验输入、查询理解、候选召回”。当前最优先顺序我会排：
+
+1. `datasets` registry：split、case、variant、fixture manifest
+2. `planners` registry：rule/multi_query/hyde/llm planner 的统一配置和缓存
+3. `indexes` metadata：cache fingerprint、index manifest、token/embedding matrix registry
+4. `retrieval` run config：workflow matrix 不再散落在 legacy command 参数里
+5. `llm` fake/real adapter：默认 fake，真实 LLM 只 sample
+
+> 是的，我希望都迁过来，但是呢需要判断是否需要重构，懂我的意思吗？我希望的是腾笼换鸟，而不是大象放进冰箱
+
+<details><summary>21 previous messages</summary>
+
+> 懂，而且这个比“全迁过来”更关键：我们要迁的是实验平台能力和边界，不是把 `mock_retriever.py` 的复杂度原封不动搬家。下一轮我按“先建新笼子，再逐步换鸟”的方式做，优先迁 `datasets`，因为它是 planner/index/retrieval 的上游根基。
+>
+> 我先看一下 `mocktesting` 现在的数据入口和 case 结构，只抽“数据注册与审计”这层，不碰生成/检索大逻辑。
+>
+> 刚才有个 PowerShell 路径参数写法让 `fixtures` 检查失败了，不影响判断。我继续看 case schema 和 split 规则，然后实现干净版 dataset manifest。
+>
+> `mocktesting` 的 input JSON 在 PowerShell `ConvertFrom-Json` 下会被编码内容绊倒，但 Python/项目代码能正常读，所以我会用 Python 标准 JSON 方式做 registry。重点仍是：只抽 schema、split、fixture、case stats，不搬生成逻辑。
+>
+> 我准备加两个干净的小层：`datasets` 负责 case/split manifest，`fixtures` 负责 fixture inventory。它们只读现有数据文件并生成结构化清单，不复制 `mocktesting` 的生成器和检索器。
+>
+> 开始改文件，新增 dataset/fixture service 和命令。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/datasets/service.py` (+185 -0)
+>
+> </details>
+>
+> `datasets/service.py` 已经是干净的 manifest 逻辑了：split 规则、case 读取、schema 摘要、fixture inventory 都是纯函数，不依赖旧检索器。接下来加命令层。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/datasets/commands.py` (+39 -0)
+>
+> </details>
+>
+> 现在让 `fixtures` 层也不再是空壳：它复用 dataset 的 fixture inventory，但提供自己的 façade，后续可以扩成真实 fixture registry。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/fixtures/service.py` (+26 -0)
+>
+> </details>
+>
+> `datasets/__init__` 内容和我预期不完全一样，我先读一下再补导出。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/datasets/__init__.py` (+29 -0)
+> - Wrote `./src/retreieval_lab/fixtures/__init__.py` (+4 -0)
+>
+> </details>
+>
+> 现在接 CLI：`dataset inspect` / `datasets inspect` 输出 dataset manifest；这就是“新笼子”的第一块。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+2 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+22 -0)
+>
+> </details>
+>
+> 给 Markdown 报告加 dataset/fixture 表，这样 manifest 不是只看 summary。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/reports/markdown.py` (+38 -0)
+>
+> </details>
+>
+> 我顺手把 architecture manifest 补齐 `fixtures` 和 `llm` 层；之前目录存在但 manifest 没列，这属于平台框架层面的漏项。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/architecture.py` (+2 -0)
+>
+> </details>
+>
+> 更新 README，让“腾笼换鸟”的迁移原则写清楚，并加入 dataset inspect 入口。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+7 -1)
+>
+> </details>
+</details>
+
+> 你认为是否全部在mocktesting的infra都遵循了‘腾笼换鸟’原则迁入了retrieve_lab?如果不是请列举展示出来
+
+<details><summary>7 previous messages</summary>
+
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先对当前工作区做一次“盘点”，重点看 `src/mocktesting` 的 CLI/infra 能力和 `src/retreieval_lab` 已经原生化了哪些边界；这样回答不会只凭上一轮印象。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-ChildItem -Path src\mocktesting -Force`
+> - Ran `Get-ChildItem -Path src\retreieval_lab -Force`
+> - Ran `rg -n "subparsers\.add_parser|add_parser\(" src\mocktesting\mock_retriever.py src\retreieval_lab`
+> - Ran `git status --short`
+>
+> </details>
+>
+> 现在看起来新包已经不是空壳了，但我还要把“原生迁移、兼容桥接、未迁移”分开数清楚。尤其是 `retreieval_lab` 里有些目录存在，但可能只是边界占位，这个和“真正换鸟”差别很大。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\compat.py`
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\coverage.py`
+> - Ran `Get-Content -Path src\retreieval_lab\architecture.py`
+> - Ran `Get-Content -Path src\retreieval_lab\cli.py`
+>
+> </details>
+>
+> 已有的 audit 规则会把 mocktesting 命令分成 `native / partial / compat_only`，我会直接跑一次当前版本的覆盖审计，再用代码结构做人工解释。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_current.json --markdown-output .tmp\retrieval_lab\infra_audit_current.md`
+> - Ran `python -c "import json; p='.tmp/retrieval_lab/infra_audit_current.json'; d=json.load(open(p,encoding='utf-8')); print('NATIVE'); print('\n'.join(r['command'] for r in d['command_coverage'] if r['status']=='native')); print('PARTIAL'); print('\n'.join(r['command']+': '+r['note'] for r in d['command_coverage'] if r['status']=='partial')); print('COMPAT'); print('\n'.join(r['command'] for r in d['command_coverage'] if r['status']=='compat_only')); print('LAYERS'); print('\n'.join(r['layer']+': '+r['status']+' '+str(r['python_file_count']) for r in d['layer_coverage']))"`
+> - Ran `rg --files src\retreieval_lab`
+> - Ran `rg -n "def .*command|class |dataclass|def .*manifest|def .*metrics|def .*qrels|def .*rerank|def .*failure" src\retreieval_lab`
+>
+> </details>
+</details>
+
+不是，**还没有全部按“腾笼换鸟”原则迁入**。目前更准确的状态是：`retreieval_lab` 已经有了新的实验平台骨架和一批原生 infra，但 mocktesting 里很多“会真正跑检索/理解/排序实验”的能力仍然是通过兼容桥调用旧 monolith。
+
+我刚跑了当前覆盖审计：
+
+```text
+legacy_command_count: 35
+fully_native_legacy_command_count: 7
+partially_native_legacy_command_count: 4
+compat_only_legacy_command_count: 24
+layer_count: 14
+empty_layer_count: 4
+coverage_rate: 0.25
+```
+
+报告在这里：[infra_audit_current.json](./.tmp/retrieval_lab/infra_audit_current.json)。
+
+**已经比较符合“腾笼换鸟”的部分**
+
+这些已经从 mocktesting 的大脚本里拆成了新的实验平台边界：
+
+- `artifacts`：实验产物、fingerprint、manifest。
+- `qrels`：qrels audit、merge、pool-from-runs、active sampling from runs。
+- `evaluators`：nDCG、ERR、MRR、Judged、run evaluate、failure attribution。
+- `ranking`：基于 run artifact 的 rule/qrels oracle rerank、workflow rerank。
+- `reports`：eval/capability Markdown 报告。
+- `capability`：cycle registry、能力趋势、SVG 图表。
+- `datasets`：dataset inspect、split manifest、fixture inventory。
+- `fixtures`：fixture inventory 边界。
+- `experiments`：legacy bridge、run export、compare、flywheel guide。
+- `config`：项目路径与配置边界。
+
+这些属于“换了笼子，也开始换鸟”。
+
+**还没有真正迁入的核心层**
+
+这 4 个目录目前还是空层或近似空层：
+
+- [indexes](./src/retreieval_lab/indexes/__init__.py)：还没有 native prepared index/cache metadata。
+- [retrieval](./src/retreieval_lab/retrieval/__init__.py)：还没有 native recall/search workflows。
+- [planners](./src/retreieval_lab/planners/__init__.py)：还没有 native query understanding registry/cache。
+- [llm](./src/retreieval_lab/llm/__init__.py)：还没有 fake/real LLM adapter。
+
+这几个就是目前最不像“腾笼换鸟”的地方，因为它们代表检索实验平台最核心的可插拔能力。
+
+**仍然只是 compat bridge 的命令**
+
+这些命令现在还主要走 [compat.py](./src/retreieval_lab/compat.py:7) 调回 `mocktesting.mock_retriever`：
+
+```text
+build-graded-qrels
+build-index
+compact-embedding-cache
+compare-query-understanding
+compare-ranking-workflows
+compare-rerank-gates
+compare-rerank-upper-bound
+compare-strong-baselines
+evaluate
+evaluate-fuzzy-multirelevance
+evaluate-graded
+evaluate-hybrid
+evaluate-leave-one-fixture-out
+evaluate-pooled
+mine-hard-negatives
+search
+tune-constraints
+validate-fuzzy-understanding
+validate-paraphrase-stress
+validate-ranking-keys
+validate-rerank-gate
+validate-scene-signature
+validate-style-negatives
+validate-style-risk-mining
+```
+
+其中最关键的是这几组：
+
+- **核心检索还没迁**：`search`、`evaluate`、`evaluate-hybrid`、`compare-ranking-workflows`、`build-index`。
+- **query understanding 还没迁**：`compare-query-understanding`、`validate-fuzzy-understanding`、`validate-paraphrase-stress`。
+- **scene/signature/style 实验还没迁**：`validate-scene-signature`、`validate-style-negatives`、`validate-style-risk-mining`、`mine-hard-negatives`。
+- **rerank gate/upper bound 还没完整迁**：`compare-strong-baselines`、`compare-rerank-upper-bound`、`validate-rerank-gate`、`compare-rerank-gates`。
+
+**部分迁入，但还没完全换鸟**
+
+这几个是“半迁移”：
+
+```text
+analyze-failures
+analyze-recall-bound
+build-pooled-qrels
+sample-active-qrels
+```
+
+原因是 `retreieval_lab` 已经有 artifact-first 版本，但 mocktesting 里那种“现场重新跑检索、现场生成信号”的版本还在旧链路里。
+
+我的判断：**现在还不是全部迁完，但方向是对的**。已经迁过来的部分更像企业实验平台：artifact-first、qrels-first、report-first、cycle-first。没迁的部分正好是下一步最应该“换鸟”的核心：`planners -> indexes -> retrieval -> live evaluation/rerank gate`。这一步要继续小心，不能把 `mock_retriever.py` 31 万字符原样搬进去，否则就真变成“大象放进冰箱”了。
+
+> 对了，我饿mocktesting应该啥也没改变吧？这是作为对照的
+
+<details><summary>2 previous messages</summary>
+
+> 对，这个要确认得很硬一点。我现在直接看 `git diff -- src/mocktesting` 和状态，确保它还是对照组，没有被我们动到。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `git status --short`
+>
+> </details>
+</details>
+
+确认过了：`src/mocktesting` 没有任何 git diff，保持未修改。
+
+当前变更只有：
+
+- [pyproject.toml](./pyproject.toml)：新增/注册 `retreieval_lab` 入口相关内容
+- [src/retreieval_lab](./src/retreieval_lab)：新实验平台
+- [tests/test_retreieval_lab_cli.py](./tests/test_retreieval_lab_cli.py)：新平台测试
+
+所以 `mocktesting` 目前仍然可以作为对照组。这个边界我会继续守住。
+
+> 那是否真的腾笼换鸟了？也就是说真的保证了复制过来的逻辑是经过评估分析与重构流程的
+
+<details><summary>4 previous messages</summary>
+
+> 我会再做一个更像“迁移质量审计”的小检查：看新包里哪些地方还依赖 `mocktesting`，哪些是原生模块，以及是否存在大段照搬的迹象。这样回答会更实在。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `rg -n "mocktesting|mock_retriever|query_planner|constraint_layer|eval_methods|embedding_text_builder" src\retreieval_lab tests\test_retreieval_lab_cli.py`
+> - Ran `Get-ChildItem -Path src\retreieval_lab -Recurse -Filter *.py | Select-Object FullName,Length | Sort-Object Length -Descending | Select-Object -First 20`
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_tenglong_check.json`
+>
+> </details>
+>
+> 为了不空口说“经过评估”，我再跑一下 `retreieval_lab` 的 focused 测试。它里面有不少和旧 `mocktesting` 结果做 parity 的用例，可以证明哪些迁移不是拍脑袋重写。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-check -p no:cacheprovider`
+>
+> </details>
+</details>
+
+不，我不会说“已经全部真正腾笼换鸟了”。更准确是：
+
+**已迁入的 infra，大部分是按腾笼换鸟做的；但整个 mocktesting 的能力还没有全部完成这个过程。**
+
+我刚确认了三件事：
+
+1. `src/mocktesting` 没有任何 diff，仍是对照组。
+2. `retreieval_lab` focused 测试通过：`40 passed`。
+3. 当前 infra audit 显示：
+   - 35 个 legacy command
+   - 7 个 fully native
+   - 4 个 partial
+   - 24 个 compat-only
+   - 4 个空层：`indexes / retrieval / planners / llm`
+   - 覆盖率约 `0.25`
+
+所以答案是：**局部是真的，整体还没有。**
+
+已经比较符合“腾笼换鸟”的部分，是这些：
+
+- [artifacts](./src/retreieval_lab/artifacts/io.py)：实验产物、manifest、fingerprint，已脱离旧 monolith。
+- [qrels](./src/retreieval_lab/qrels/service.py)：audit、merge、active sampling、pool-from-runs，做成了独立服务层。
+- [evaluators](./src/retreieval_lab/evaluators/metrics.py)：nDCG、ERR、MRR、Judged、Recall 等指标原生化。
+- [ranking](./src/retreieval_lab/ranking/rerank.py)：基于 run artifact 的 rule/qrels oracle rerank。
+- [reports](./src/retreieval_lab/reports/eval_report.py)：报告生成拆出来了。
+- [capability](./src/retreieval_lab/capability/service.py)：能力周期、趋势、SVG 图表，是新 infra，不是旧逻辑复制。
+- [datasets](./src/retreieval_lab/datasets/service.py)：dataset manifest / split / fixture inventory 已经开始重构。
+
+这些不是简单复制，因为测试里做了不少 legacy parity 校验，比如 qrels audit、graded metrics、recall bound、pooled qrels、active sampling、rerank、failure classify、experiment compare、markdown report 都和 `mocktesting` 对照过。
+
+但还没有完成真正换鸟的部分也很明确：
+
+- `planners` 还是空的：query understanding 还没真正迁。
+- `indexes` 还是空的：prepared index/cache metadata 还没真正迁。
+- `retrieval` 还是空的：semantic/lexical/hybrid search workflow 还没真正迁。
+- `llm` 还是空的：fake/real LLM adapter 还没真正迁。
+- `search / evaluate / compare-ranking-workflows / compare-query-understanding / validate-paraphrase-stress / validate-scene-signature / validate-style-risk-mining` 等核心实验命令仍主要走 compat bridge。
+
+所以我会这样定性：
+
+**不是“大象放进冰箱”，因为已经迁出的部分确实被拆成 artifact-first、qrels-first、report-first、cycle-first 的新平台结构，并有 parity 测试。
+但也还不是“全量腾笼换鸟”，因为真正的检索核心、query understanding、index、LLM adapter 还没有迁完。**
+
+下一步最应该迁的是 `planners`，但不能复制 `mocktesting.query_planner`。应该先做 planner registry、planner result schema、cache、fake planner、legacy adapter，然后再逐步把 rule/multi-query/HyDE 迁进去。这样才继续符合“换鸟”，不是搬家。
+
+> 好的，需要你构思比较完备的schema,然后在retrieve_lab中实现
+
+<details><summary>14 previous messages</summary>
+
+> 我把这个理解为：先给 `retreieval_lab` 补一个“实验平台级 schema 层”，重点从 planner/query understanding 开始，但设计要能承载后续 index、retrieval、run artifact、qrels、LLM。先读一下现有模块边界，然后我会落代码和测试。
+>
+> <details><summary>Ran 9 commands</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\datasets\service.py`
+> - Ran `Get-Content -Path src\retreieval_lab\artifacts\io.py`
+> - Ran `Get-Content -Path src\retreieval_lab\qrels\service.py -TotalCount 220`
+> - Ran `Get-Content -Path tests\test_retreieval_lab_cli.py -TotalCount 260`
+> - Ran `rg -n "script_stage|technology_showcase|setup|positive_style|negative_style|STYLE|STAGE|creative_purpose" src\mocktesting src\sceneweaver tests -g "*.py"`
+> - Ran `Get-Content -Path src\mocktesting\query_planner.py`
+> - Ran `Get-Content -Path src\retreieval_lab\datasets\__init__.py`
+> - Ran `Get-Content -Path src\retreieval_lab\README.md`
+> - Ran `Get-Content -Path pyproject.toml`
+>
+> </details>
+>
+> 我会把 schema 做成“平台契约层”，不是 planner 的临时代码：一套 Pydantic 模型 + JSON schema catalog + CLI 校验命令；同时给 planners/indexes/retrieval/llm 放入轻量 schema 边界，先定义契约，不搬旧执行逻辑。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/schemas/models.py` (+516 -0)
+>
+> </details>
+>
+> 现在 schema 模型已经落下来了：它是版本化契约，不依赖 mocktesting。接下来我把它挂到 CLI，并给 planner/index/retrieval/llm 层放轻量 schema facade，这样不是只写了一个孤立文件。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/schemas/commands.py` (+113 -0)
+>
+> </details>
+>
+> 我还在保持一个边界：这些 schema 是新平台契约，CLI 可以生成 catalog/JSON schema，也可以校验 qrels/run_row/query_plan 等记录；不是把旧 `mock_retriever` 的执行路径搬过来。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/schemas/__init__.py` (+61 -0)
+>
+> </details>
+>
+> 接下来补四个“空层”的 schema 边界：planner 先只定义和校验 query plan contract；index/retrieval/LLM 只定义 manifest/config/judgement contract。这样 infra 变完整，但不会假装核心检索已经迁完。
+>
+> <details><summary>Created 1 file, edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/schema.py` (+34 -0)
+> - Wrote `./src/retreieval_lab/planners/__init__.py` (+9 -0)
+>
+> </details>
+>
+> planner 这一步只迁了“契约”和校验，不迁执行器，这是故意的：先让每种 query understanding 策略必须产出同一种可审计对象，后面再迁 rule/multi-query/HyDE 才不会混成一坨。
+>
+> <details><summary>Created 2 files, edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/indexes/schema.py` (+33 -0)
+> - Wrote `./src/retreieval_lab/indexes/__init__.py` (+14 -0)
+> - Wrote `./src/retreieval_lab/retrieval/schema.py` (+17 -0)
+>
+> </details>
+>
+> Stream error
+>
+> Reconnecting 5/5
+> unexpected status 502 Bad Gateway: Unknown error, url: http://127.0.0.1:8317/v1/responses
+>
+> System error
+>
+> unexpected status 502 Bad Gateway: Unknown error, url: http://127.0.0.1:8317/v1/responses
 </details>
