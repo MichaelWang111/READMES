@@ -8394,3 +8394,2808 @@ coverage_rate: 0.314286
 最自然的下一步是迁 `planners` 的 registry/cache/fake planner/legacy adapter。也就是先让所有 planner 输出都通过新的 `QueryPlanModel` 校验，再逐步迁 `rule / multi_query / hyde_card`，这样继续是“腾笼换鸟”，不是复制 monolith。
 
 > 好的，你来做计划方案并执行，每一轮迭代需要自检测，并与mocktesting做功能对比。每一轮做一个计划并执行，直到你认为真的重构成一个很好的状态。
+
+> 你真的在做吗？怎么没有任何输出啊
+
+在的，在做。刚才那一段我是在本地跑检查和测试，所以中途没有持续输出，确实让你感觉像卡住了，这点我应该更早同步。
+
+目前已经完成的状态是：
+
+- `src/mocktesting` 没动，仍是对照组。
+- `src/retreieval_lab` 已新增 schema contract 层。
+- 四个原本空的核心层 `planners / indexes / retrieval / llm` 已经有了原生 schema facade。
+- 新增 CLI：
+  - `python -m retreieval_lab schema catalog`
+  - `python -m retreieval_lab schema show query_plan`
+  - `python -m retreieval_lab schema validate qrel --input ...`
+- 测试结果：
+  - focused：`44 passed`
+  - full：`180 passed`
+
+不过现在系统切到了 **Plan Mode**，我不能继续直接改文件，只能先把下一步计划写清楚。下一步我建议做 `planners` 迁移：不是复制 `mocktesting.query_planner`，而是做 planner registry、cache、legacy adapter、fake planner、schema validation gate，让所有 query understanding 策略先统一输出新的 `QueryPlanModel`。
+
+> 也就是说目标模式正在进行是吗？如果是的话，我后续开启希望展示更多细节，否则我无法得知进度
+
+是的，刚才确实是在推进，不是停了；只是我中间反馈太少，这个体验不好。当前状态是：上一轮实现已经完成并验证过，之后系统切到了 **Plan Mode**，所以现在我只能规划，不能继续直接改代码。
+
+后续我会按这个节奏给你更多可见进度：
+
+- 开始前说明：我现在要查什么、为什么查。
+- 读代码时同步：发现了哪些事实，哪些模块已经迁了，哪些还只是 compat。
+- 编辑前说明：准备改哪些层、目标是什么。
+- 长任务中每隔一段时间更新：比如测试、审计、跑 CLI 时告诉你正在等什么。
+- 完成后给明确结果：改了什么、哪些命令跑过、指标是多少、`mocktesting` 是否仍然干净。
+
+你这个提醒很对。实验平台这种工作如果没有过程反馈，就像黑盒在跑，很难判断我是在分析、执行、卡住，还是跑偏了。后面我会把过程摊开一些。
+
+> 现在在做什么
+
+现在没有后台任务在跑，也没有继续改文件。上一轮实际工作已经停在这个状态：
+
+- 已完成 `retreieval_lab` 的 schema contract 层。
+- 已把 `planners / indexes / retrieval / llm` 从空层变成原生 schema facade。
+- 已新增 `schema catalog / show / validate` CLI。
+- 已跑过验证：
+  - `tests/test_retreieval_lab_cli.py`：`44 passed`
+  - 全量 `pytest`：`180 passed`
+- 已确认 `src/mocktesting` 没有 diff，仍是对照组。
+
+现在系统处于 **Plan Mode**，所以我不能继续直接改代码。当前我下一步要做的，是给你规划 `planners` 迁移：把 query understanding 做成 registry/cache/adapter/fake planner/schema gate，而不是复制 `mocktesting.query_planner`。这样会继续符合“腾笼换鸟”。
+
+如果继续往下，我会先做一轮只读检查，然后给你一个 `<proposed_plan>`。
+
+> 好的，你来做多轮计划方案执行，每一轮迭代需要自检测，并与mocktesting做功能对比。每一轮做一个计划并执行，并在本轮的基础之上在做计划，直到你认为真的重构成一个很好的状态。我将不做干涉
+
+<details><summary>4 previous messages</summary>
+
+> 我先做一轮只读盘点，把当前 `retreieval_lab` 的迁移边界、compat-only 命令、测试覆盖形状重新确认一下；然后给你一个多轮迭代计划。现在是 Plan Mode，所以这一轮我不会改文件。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `python -c "from retreieval_lab.experiments.coverage import command_coverage_rows, layer_coverage_rows; from pathlib import Path; rows=command_coverage_rows(); layers=layer_coverage_rows(Path('src/retreieval_lab')); print('COMMANDS'); print('native',sum(r['status']=='native' for r in rows),'partial',sum(r['status']=='partial' for r in rows),'compat',sum(r['status']=='compat_only' for r in rows),'native_only',sum(r['status']=='native_only' for r in rows)); print('COMPAT_ONLY'); print('\n'.join(r['command'] for r in rows if r['status']=='compat_only')); print('LAYERS'); print('\n'.join(r['layer']+':'+r['status'] for r in layers))"`
+> - Ran `rg -n "mocktesting|run_mocktesting_backend|compat_only|schema|query_plan_contract|validate_query_plan" src\retreieval_lab tests\test_retreieval_lab_cli.py`
+> - Ran `rg --files src\retreieval_lab tests | Sort-Object`
+> - Ran `git status --short`
+>
+> </details>
+>
+> Plan
+>
+> # Retrieval Lab 多轮重构飞轮计划
+>
+> ## Summary
+>
+> 目标是把 `src/retreieval_lab` 从“有架构和 schema 的实验平台雏形”继续推进到真正可独立承载检索实验的平台，同时保持 `src/mocktesting` 完全不变，作为对照组。
+>
+> 当前基线：
+>
+> - `src/mocktesting`：不修改，只用于对照。
+> - `retreieval_lab` 当前迁移状态：`native=7`、`partial=4`、`compat_only=24`、`native_only=12`、空层 `0`。
+> - 每一轮都遵循：先计划本轮 → 实现 → 自检测 → 与 `mocktesting` 功能对比 → 输出结果 → 在结果基础上规划下一轮。
+> - 每轮开始、编辑前、测试中、结束时都输出进度细节，避免黑盒运行。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移质量门禁
+>
+> - 新增或强化 migration audit gate，用于每轮自动检查：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `retreieval_lab infra audit` 必须可运行。
+>   - 记录 native / partial / compat-only 数量变化。
+>   - 记录本轮新增命令、测试结果、对照结果。
+> - 输出每轮 migration report，作为后续 cycle 的追踪资产。
+> - 验收：
+>   - 能明确展示“本轮迁了什么、还剩什么、mocktesting 是否干净”。
+>
+> ### Round 1：Planner 层真正换鸟
+>
+> - 在 `retreieval_lab.planners` 实现原生 planner registry，不复制 `mocktesting.query_planner`：
+>   - `rule`
+>   - `multi_query`
+>   - `hyde_card`
+>   - `fake_llm`
+>   - `legacy_adapter`
+> - 所有 planner 输出必须通过 `QueryPlanModel` 校验。
+> - 实现 planner cache，缓存 key 包含 planner name、schema version、input hash、config fingerprint。
+> - 新增 CLI：
+>   - `planner plan`
+>   - `planner compare`
+>   - `planner audit-cache`
+> - 与 `mocktesting` 对比：
+>   - 代表性 query 上比较 `desired_stage / forbidden_stage / positive_style / negative_style / negative_leak_rate`。
+>   - legacy adapter 只做对照，不作为新平台默认实现。
+> - 验收：
+>   - `compare-query-understanding` 的核心 planner 数据流可由 `retreieval_lab` 原生产出。
+>   - 负向词不进入 `positive_query / rewrites / hyde_text`。
+>   - LLM 默认关闭。
+>
+> ### Round 2：Index 与 Retrieval 轻量原生化
+>
+> - 在 `retreieval_lab.indexes` 实现 index manifest builder：
+>   - dataset fingerprint
+>   - item count
+>   - channel list
+>   - lexical tokenizer config
+>   - cache fingerprint
+> - 在 `retreieval_lab.retrieval` 实现 artifact-first retrieval runner：
+>   - 输入 dataset cases + planner output + existing run artifact 或 lightweight local candidates。
+>   - 输出统一 `RunRowModel`。
+> - 先迁轻量 lexical / metadata / constraint retrieval，不迁大型 embedding matrix。
+> - 新增 CLI：
+>   - `index inspect`
+>   - `index manifest`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 与 `mocktesting` 对比：
+>   - 对相同 split/limit 的 case，比较 top result shape、target rank、stage hit、style violation。
+> - 验收：
+>   - `search / evaluate` 的最小原生路径可跑。
+>   - heavy semantic 仍可 compat，但 run artifact schema 统一。
+>
+> ### Round 3：Ranking Workflows 原生化
+>
+> - 把当前 artifact-level workflow rerank 扩展为完整 workflow runner：
+>   - `semantic_only`
+>   - `lexical_only`
+>   - `constraints_only`
+>   - `hybrid_rrf`
+>   - `hybrid_rrf_constraints`
+>   - `hybrid_rrf_constraints_signature`
+>   - `adaptive_signature`
+> - 保留与 `mocktesting` 的 parity tests。
+> - 新增 ranking explain：
+>   - score components
+>   - constraint hits
+>   - signature hits
+>   - veto / penalty reason
+> - 与 `mocktesting` 对比：
+>   - `compare-ranking-workflows --limit 60` 指标差异必须可解释。
+> - 验收：
+>   - `compare-ranking-workflows` 不再完全依赖 compat。
+>   - 排序报告可说明每个 workflow 为什么赢或输。
+>
+> ### Round 4：Fuzzy / Paraphrase / Scene Signature 实验迁移
+>
+> - 原生迁移以下实验的核心数据流：
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `validate-scene-signature`
+>   - `evaluate-fuzzy-multirelevance`
+> - 使用 graded qrels + fuzzy 多解指标作为主验收：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - 与 `mocktesting` 对比：
+>   - 相同输入、相同 qrels、相同 top-k 下生成对照报告。
+> - 验收：
+>   - fuzzy/paraphrase 实验可在 `retreieval_lab` 内闭环。
+>   - exact scene recall 与 graded relevance 同时输出，不再只看单 target recall。
+>
+> ### Round 5：Rerank Gate 与 LLM Adapter
+>
+> - 在 `retreieval_lab.llm` 实现 fake/real adapter 边界：
+>   - fake client 用于测试。
+>   - real client 默认关闭，只在显式 sample size 下启用。
+> - 原生实现：
+>   - rerank gate selection
+>   - candidate summary builder
+>   - qrels oracle upper bound
+>   - sampled LLM rerank payload/report
+> - 与 `mocktesting` 对比：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - rerank report 明确区分：召回问题、重排问题、prompt/candidate summary 问题。
+>
+> ### Round 6：Compat 收敛与文档化
+>
+> - 对所有 compat-only 命令重新分类：
+>   - 已原生替代
+>   - 仍需 compat
+>   - 可废弃
+> - 更新 `retrieval-flywheel-guide`，默认优先使用原生命令。
+> - 更新 README，加入推荐工作流：
+>   - dataset inspect
+>   - planner compare
+>   - retrieval run
+>   - qrels pool/audit
+>   - evaluate
+>   - analyze failures
+>   - capability cycle
+> - 验收：
+>   - compat-only 命令数量显著下降。
+>   - 剩余 compat-only 都有明确理由。
+>   - `mocktesting` 仍可作为 baseline 单独运行。
+>
+> ## Test Plan
+>
+> - 每轮固定自检测：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - focused tests：`tests/test_retreieval_lab_cli.py`。
+>   - full tests：`pytest -q --basetemp .pytest-tmp/<round> -p no:cacheprovider`。
+>   - `python -m retreieval_lab infra audit`。
+> - 每轮固定对照：
+>   - 至少一个 `mocktesting` legacy command 与对应 `retreieval_lab` native command 输出对比。
+>   - 对比字段包括 summary metrics、row count、top-k shape、failure categories。
+> - 每轮固定报告：
+>   - migration report
+>   - infra audit report
+>   - 如涉及检索质量，则生成 eval/capability report。
+> - 每轮验收失败时：
+>   - 不继续下一轮。
+>   - 先修复 schema、parity、测试或性能问题。
+>   - 明确说明失败原因和修复动作。
+>
+> ## Assumptions
+>
+> - 当前仍处于 Plan Mode，本轮只给计划，不修改文件。
+> - 用户不再逐轮干涉时，默认按上述 round 顺序推进。
+> - `src/mocktesting` 永远保持对照组，不做修改。
+> - 不复制 `mocktesting.mock_retriever.py` monolith；只迁移稳定边界、契约、可测试服务和经过 parity 验证的逻辑。
+> - LLM 默认关闭；真实 LLM 只用于显式 sample 实验。
+> - 每轮我都会输出更多中间进度，包括正在读什么、准备改什么、测试跑到哪里、和 mocktesting 对比结果如何。
+>
+> Plan implementation
+>
+> Status: completed
+> # Retrieval Lab 多轮重构飞轮计划
+>
+> ## Summary
+>
+> 目标是把 `src/retreieval_lab` 从“有架构和 schema 的实验平台雏形”继续推进到真正可独立承载检索实验的平台，同时保持 `src/mocktesting` 完全不变，作为对照组。
+>
+> 当前基线：
+>
+> - `src/mocktesting`：不修改，只用于对照。
+> - `retreieval_lab` 当前迁移状态：`native=7`、`partial=4`、`compat_only=24`、`native_only=12`、空层 `0`。
+> - 每一轮都遵循：先计划本轮 → 实现 → 自检测 → 与 `mocktesting` 功能对比 → 输出结果 → 在结果基础上规划下一轮。
+> - 每轮开始、编辑前、测试中、结束时都输出进度细节，避免黑盒运行。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移质量门禁
+>
+> - 新增或强化 migration audit gate，用于每轮自动检查：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `retreieval_lab infra audit` 必须可运行。
+>   - 记录 native / partial / compat-only 数量变化。
+>   - 记录本轮新增命令、测试结果、对照结果。
+> - 输出每轮 migration report，作为后续 cycle 的追踪资产。
+> - 验收：
+>   - 能明确展示“本轮迁了什么、还剩什么、mocktesting 是否干净”。
+>
+> ### Round 1：Planner 层真正换鸟
+>
+> - 在 `retreieval_lab.planners` 实现原生 planner registry，不复制 `mocktesting.query_planner`：
+>   - `rule`
+>   - `multi_query`
+>   - `hyde_card`
+>   - `fake_llm`
+>   - `legacy_adapter`
+> - 所有 planner 输出必须通过 `QueryPlanModel` 校验。
+> - 实现 planner cache，缓存 key 包含 planner name、schema version、input hash、config fingerprint。
+> - 新增 CLI：
+>   - `planner plan`
+>   - `planner compare`
+>   - `planner audit-cache`
+> - 与 `mocktesting` 对比：
+>   - 代表性 query 上比较 `desired_stage / forbidden_stage / positive_style / negative_style / negative_leak_rate`。
+>   - legacy adapter 只做对照，不作为新平台默认实现。
+> - 验收：
+>   - `compare-query-understanding` 的核心 planner 数据流可由 `retreieval_lab` 原生产出。
+>   - 负向词不进入 `positive_query / rewrites / hyde_text`。
+>   - LLM 默认关闭。
+>
+> ### Round 2：Index 与 Retrieval 轻量原生化
+>
+> - 在 `retreieval_lab.indexes` 实现 index manifest builder：
+>   - dataset fingerprint
+>   - item count
+>   - channel list
+>   - lexical tokenizer config
+>   - cache fingerprint
+> - 在 `retreieval_lab.retrieval` 实现 artifact-first retrieval runner：
+>   - 输入 dataset cases + planner output + existing run artifact 或 lightweight local candidates。
+>   - 输出统一 `RunRowModel`。
+> - 先迁轻量 lexical / metadata / constraint retrieval，不迁大型 embedding matrix。
+> - 新增 CLI：
+>   - `index inspect`
+>   - `index manifest`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 与 `mocktesting` 对比：
+>   - 对相同 split/limit 的 case，比较 top result shape、target rank、stage hit、style violation。
+> - 验收：
+>   - `search / evaluate` 的最小原生路径可跑。
+>   - heavy semantic 仍可 compat，但 run artifact schema 统一。
+>
+> ### Round 3：Ranking Workflows 原生化
+>
+> - 把当前 artifact-level workflow rerank 扩展为完整 workflow runner：
+>   - `semantic_only`
+>   - `lexical_only`
+>   - `constraints_only`
+>   - `hybrid_rrf`
+>   - `hybrid_rrf_constraints`
+>   - `hybrid_rrf_constraints_signature`
+>   - `adaptive_signature`
+> - 保留与 `mocktesting` 的 parity tests。
+> - 新增 ranking explain：
+>   - score components
+>   - constraint hits
+>   - signature hits
+>   - veto / penalty reason
+> - 与 `mocktesting` 对比：
+>   - `compare-ranking-workflows --limit 60` 指标差异必须可解释。
+> - 验收：
+>   - `compare-ranking-workflows` 不再完全依赖 compat。
+>   - 排序报告可说明每个 workflow 为什么赢或输。
+>
+> ### Round 4：Fuzzy / Paraphrase / Scene Signature 实验迁移
+>
+> - 原生迁移以下实验的核心数据流：
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `validate-scene-signature`
+>   - `evaluate-fuzzy-multirelevance`
+> - 使用 graded qrels + fuzzy 多解指标作为主验收：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - 与 `mocktesting` 对比：
+>   - 相同输入、相同 qrels、相同 top-k 下生成对照报告。
+> - 验收：
+>   - fuzzy/paraphrase 实验可在 `retreieval_lab` 内闭环。
+>   - exact scene recall 与 graded relevance 同时输出，不再只看单 target recall。
+>
+> ### Round 5：Rerank Gate 与 LLM Adapter
+>
+> - 在 `retreieval_lab.llm` 实现 fake/real adapter 边界：
+>   - fake client 用于测试。
+>   - real client 默认关闭，只在显式 sample size 下启用。
+> - 原生实现：
+>   - rerank gate selection
+>   - candidate summary builder
+>   - qrels oracle upper bound
+>   - sampled LLM rerank payload/report
+> - 与 `mocktesting` 对比：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - rerank report 明确区分：召回问题、重排问题、prompt/candidate summary 问题。
+>
+> ### Round 6：Compat 收敛与文档化
+>
+> - 对所有 compat-only 命令重新分类：
+>   - 已原生替代
+>   - 仍需 compat
+>   - 可废弃
+> - 更新 `retrieval-flywheel-guide`，默认优先使用原生命令。
+> - 更新 README，加入推荐工作流：
+>   - dataset inspect
+>   - planner compare
+>   - retrieval run
+>   - qrels pool/audit
+>   - evaluate
+>   - analyze failures
+>   - capability cycle
+> - 验收：
+>   - compat-only 命令数量显著下降。
+>   - 剩余 compat-only 都有明确理由。
+>   - `mocktesting` 仍可作为 baseline 单独运行。
+>
+> ## Test Plan
+>
+> - 每轮固定自检测：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - focused tests：`tests/test_retreieval_lab_cli.py`。
+>   - full tests：`pytest -q --basetemp .pytest-tmp/<round> -p no:cacheprovider`。
+>   - `python -m retreieval_lab infra audit`。
+> - 每轮固定对照：
+>   - 至少一个 `mocktesting` legacy command 与对应 `retreieval_lab` native command 输出对比。
+>   - 对比字段包括 summary metrics、row count、top-k shape、failure categories。
+> - 每轮固定报告：
+>   - migration report
+>   - infra audit report
+>   - 如涉及检索质量，则生成 eval/capability report。
+> - 每轮验收失败时：
+>   - 不继续下一轮。
+>   - 先修复 schema、parity、测试或性能问题。
+>   - 明确说明失败原因和修复动作。
+>
+> ## Assumptions
+>
+> - 当前仍处于 Plan Mode，本轮只给计划，不修改文件。
+> - 用户不再逐轮干涉时，默认按上述 round 顺序推进。
+> - `src/mocktesting` 永远保持对照组，不做修改。
+> - 不复制 `mocktesting.mock_retriever.py` monolith；只迁移稳定边界、契约、可测试服务和经过 parity 验证的逻辑。
+> - LLM 默认关闭；真实 LLM 只用于显式 sample 实验。
+> - 每轮我都会输出更多中间进度，包括正在读什么、准备改什么、测试跑到哪里、和 mocktesting 对比结果如何。
+</details>
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Retrieval Lab 多轮重构飞轮计划
+>
+> ## Summary
+>
+> 目标是把 `src/retreieval_lab` 从“有架构和 schema 的实验平台雏形”继续推进到真正可独立承载检索实验的平台，同时保持 `src/mocktesting` 完全不变，作为对照组。
+>
+> 当前基线：
+>
+> - `src/mocktesting`：不修改，只用于对照。
+> - `retreieval_lab` 当前迁移状态：`native=7`、`partial=4`、`compat_only=24`、`native_only=12`、空层 `0`。
+> - 每一轮都遵循：先计划本轮 → 实现 → 自检测 → 与 `mocktesting` 功能对比 → 输出结果 → 在结果基础上规划下一轮。
+> - 每轮开始、编辑前、测试中、结束时都输出进度细节，避免黑盒运行。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移质量门禁
+>
+> - 新增或强化 migration audit gate，用于每轮自动检查：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `retreieval_lab infra audit` 必须可运行。
+>   - 记录 native / partial / compat-only 数量变化。
+>   - 记录本轮新增命令、测试结果、对照结果。
+> - 输出每轮 migration report，作为后续 cycle 的追踪资产。
+> - 验收：
+>   - 能明确展示“本轮迁了什么、还剩什么、mocktesting 是否干净”。
+>
+> ### Round 1：Planner 层真正换鸟
+>
+> - 在 `retreieval_lab.planners` 实现原生 planner registry，不复制 `mocktesting.query_planner`：
+>   - `rule`
+>   - `multi_query`
+>   - `hyde_card`
+>   - `fake_llm`
+>   - `legacy_adapter`
+> - 所有 planner 输出必须通过 `QueryPlanModel` 校验。
+> - 实现 planner cache，缓存 key 包含 planner name、schema version、input hash、config fingerprint。
+> - 新增 CLI：
+>   - `planner plan`
+>   - `planner compare`
+>   - `planner audit-cache`
+> - 与 `mocktesting` 对比：
+>   - 代表性 query 上比较 `desired_stage / forbidden_stage / positive_style / negative_style / negative_leak_rate`。
+>   - legacy adapter 只做对照，不作为新平台默认实现。
+> - 验收：
+>   - `compare-query-understanding` 的核心 planner 数据流可由 `retreieval_lab` 原生产出。
+>   - 负向词不进入 `positive_query / rewrites / hyde_text`。
+>   - LLM 默认关闭。
+>
+> ### Round 2：Index 与 Retrieval 轻量原生化
+>
+> - 在 `retreieval_lab.indexes` 实现 index manifest builder：
+>   - dataset fingerprint
+>   - item count
+>   - channel list
+>   - lexical tokenizer config
+>   - cache fingerprint
+> - 在 `retreieval_lab.retrieval` 实现 artifact-first retrieval runner：
+>   - 输入 dataset cases + planner output + existing run artifact 或 lightweight local candidates。
+>   - 输出统一 `RunRowModel`。
+> - 先迁轻量 lexical / metadata / constraint retrieval，不迁大型 embedding matrix。
+> - 新增 CLI：
+>   - `index inspect`
+>   - `index manifest`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 与 `mocktesting` 对比：
+>   - 对相同 split/limit 的 case，比较 top result shape、target rank、stage hit、style violation。
+> - 验收：
+>   - `search / evaluate` 的最小原生路径可跑。
+>   - heavy semantic 仍可 compat，但 run artifact schema 统一。
+>
+> ### Round 3：Ranking Workflows 原生化
+>
+> - 把当前 artifact-level workflow rerank 扩展为完整 workflow runner：
+>   - `semantic_only`
+>   - `lexical_only`
+>   - `constraints_only`
+>   - `hybrid_rrf`
+>   - `hybrid_rrf_constraints`
+>   - `hybrid_rrf_constraints_signature`
+>   - `adaptive_signature`
+> - 保留与 `mocktesting` 的 parity tests。
+> - 新增 ranking explain：
+>   - score components
+>   - constraint hits
+>   - signature hits
+>   - veto / penalty reason
+> - 与 `mocktesting` 对比：
+>   - `compare-ranking-workflows --limit 60` 指标差异必须可解释。
+> - 验收：
+>   - `compare-ranking-workflows` 不再完全依赖 compat。
+>   - 排序报告可说明每个 workflow 为什么赢或输。
+>
+> ### Round 4：Fuzzy / Paraphrase / Scene Signature 实验迁移
+>
+> - 原生迁移以下实验的核心数据流：
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `validate-scene-signature`
+>   - `evaluate-fuzzy-multirelevance`
+> - 使用 graded qrels + fuzzy 多解指标作为主验收：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - 与 `mocktesting` 对比：
+>   - 相同输入、相同 qrels、相同 top-k 下生成对照报告。
+> - 验收：
+>   - fuzzy/paraphrase 实验可在 `retreieval_lab` 内闭环。
+>   - exact scene recall 与 graded relevance 同时输出，不再只看单 target recall。
+>
+> ### Round 5：Rerank Gate 与 LLM Adapter
+>
+> - 在 `retreieval_lab.llm` 实现 fake/real adapter 边界：
+>   - fake client 用于测试。
+>   - real client 默认关闭，只在显式 sample size 下启用。
+> - 原生实现：
+>   - rerank gate selection
+>   - candidate summary builder
+>   - qrels oracle upper bound
+>   - sampled LLM rerank payload/report
+> - 与 `mocktesting` 对比：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - rerank report 明确区分：召回问题、重排问题、prompt/candidate summary 问题。
+>
+> ### Round 6：Compat 收敛与文档化
+>
+> - 对所有 compat-only 命令重新分类：
+>   - 已原生替代
+>   - 仍需 compat
+>   - 可废弃
+> - 更新 `retrieval-flywheel-guide`，默认优先使用原生命令。
+> - 更新 README，加入推荐工作流：
+>   - dataset inspect
+>   - planner compare
+>   - retrieval run
+>   - qrels pool/audit
+>   - evaluate
+>   - analyze failures
+>   - capability cycle
+> - 验收：
+>   - compat-only 命令数量显著下降。
+>   - 剩余 compat-only 都有明确理由。
+>   - `mocktesting` 仍可作为 baseline 单独运行。
+>
+> ## Test Plan
+>
+> - 每轮固定自检测：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - focused tests：`tests/test_retreieval_lab_cli.py`。
+>   - full tests：`pytest -q --basetemp .pytest-tmp/<round> -p no:cacheprovider`。
+>   - `python -m retreieval_lab infra audit`。
+> - 每轮固定对照：
+>   - 至少一个 `mocktesting` legacy command 与对应 `retreieval_lab` native command 输出对比。
+>   - 对比字段包括 summary metrics、row count、top-k shape、failure categories。
+> - 每轮固定报告：
+>   - migration report
+>   - infra audit report
+>   - 如涉及检索质量，则生成 eval/capability report。
+> - 每轮验收失败时：
+>   - 不继续下一轮。
+>   - 先修复 schema、parity、测试或性能问题。
+>   - 明确说明失败原因和修复动作。
+>
+> ## Assumptions
+>
+> - 当前仍处于 Plan Mode，本轮只给计划，不修改文件。
+> - 用户不再逐轮干涉时，默认按上述 round 顺序推进。
+> - `src/mocktesting` 永远保持对照组，不做修改。
+> - 不复制 `mocktesting.mock_retriever.py` monolith；只迁移稳定边界、契约、可测试服务和经过 parity 验证的逻辑。
+> - LLM 默认关闭；真实 LLM 只用于显式 sample 实验。
+> - 每轮我都会输出更多中间进度，包括正在读什么、准备改什么、测试跑到哪里、和 mocktesting 对比结果如何。
+
+<details><summary>173 previous messages</summary>
+
+> 收到，现在已经回到可执行模式了。我先从 Round 0 和 Round 1 做起：先补迁移门禁，再把 planner 层从“只有 schema contract”推进到可运行的原生 registry/cache/CLI；同时保证 `src/mocktesting` 仍然零改动。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\cli.py`
+> - Ran `Get-Content -Path src\retreieval_lab\schemas\models.py`
+> - Ran `Get-Content -Path src\mocktesting\query_planner.py -TotalCount 260`
+> - Ran `Get-Content -Path src\sceneweaver\retrieval\query_plan.py`
+>
+> </details>
+>
+> 我已经确认了当前代码形状：`planners` 现在只有 contract facade，`mocktesting` 仍通过 compat 作为后端。接下来编辑会集中在两个新服务：`experiments.migration` 做 Round 0 门禁，`planners.service/commands` 做 Round 1 原生 planner。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\__init__.py`
+> - Ran `Get-Content -Path src\retreieval_lab\reports\markdown.py -TotalCount 120`
+> - Ran `Get-Content -Path src\sceneweaver\retrieval\style.py`
+> - Ran `Get-Content -Path src\retreieval_lab\artifacts\__init__.py`
+>
+> </details>
+>
+> 我准备开始改文件：先加 `migration audit`，它会作为每轮自检的固定入口；然后加 planner 原生服务与 CLI。所有输出都写 `.tmp`，不会碰 `mocktesting`。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/migration.py` (+195 -0)
+>
+> </details>
+>
+> Round 0 的门禁服务已经加上了；它会直接检查 `git diff -- src/mocktesting`，并把 coverage 数量和 delta 写成迁移报告。现在继续接 CLI 和 alias。
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+3 -0)
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\__init__.py`
+>
+> </details>
+>
+> 现在进入 Round 1：我会用 `sceneweaver.retrieval.build_query_plan` 作为 rule 的基础信号，再在 `retreieval_lab` 内补一个轻量、可测试的 registry/cache/sanitizer。这样避免复制 `mocktesting.query_planner` 的大段逻辑。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+695 -0)
+>
+> </details>
+>
+> Planner 服务已落地：registry/cache/sanitizer/compare 都是原生的，`legacy_adapter` 只在显式选择时才 import `mocktesting` 做对照。接下来接 CLI。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/commands.py` (+96 -0)
+>
+> </details>
+>
+> CLI 命令处理器也好了；现在导出 planner API，并把 `planner plan/compare/audit-cache` 接入主入口。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/__init__.py` (+32 -1)
+>
+> </details>
+>
+> 我会把主 CLI 扩展成现代 planner 命令组，并把 migration audit 命令也挂上。之后先跑 smoke，找语法/模型问题。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+3 -0)
+>
+> </details>
+>
+> 我发现一个重要细节：老 alias `planner compare` 原本会落回 `compare-query-understanding` compat。现在 Round 1 要让它变成原生 planner compare，所以我会把这个 alias 切到 `planner-compare`；直接调用旧命令仍然保留 compat。
+>
+> <details><summary>Edited 3 files</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -1)
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+4 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+12 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+4 -1)
+> - Wrote `./src/retreieval_lab/cli.py` (+24 -0)
+> - Wrote `./src/retreieval_lab/cli.py` (+46 -0)
+>
+> </details>
+>
+> CLI 已经接好。下一步我会加测试：一个覆盖迁移门禁，一个覆盖 planner plan/cache/compare，一个覆盖 alias 从旧 compat 切到新原生命令。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+1 -0)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+4 -0)
+>
+> </details>
+>
+> 测试的 alias 部分已更新，`planner compare` 现在会走原生 `planner-compare`，直接旧命令 `compare-query-understanding` 仍保留为 compat 对照。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+86 -0)
+>
+> </details>
+>
+> Round 0/1 的测试已经写上了。现在我先跑 focused suite；如果 planner schema 或 legacy adapter 有问题，会在这里暴露。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round1 -p no:cacheprovider`
+>
+> </details>
+>
+> Focused suite 49 条过了。接下来补文档/飞轮入口，让新命令不是隐藏能力；然后跑 migration audit、planner compare 与 mocktesting 对照。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\flywheel.py`
+> - Ran `Get-Content -Path src\retreieval_lab\README.md`
+>
+> </details>
+>
+> 我会把飞轮第一步改成 migration audit，并把 planner compare 放到 qrels 前面。这样以后每轮一开始就能看到 mocktesting 是否干净、planner 层是否在新平台内工作。
+>
+> <details><summary>Edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+29 -17)
+> - Wrote `./src/retreieval_lab/README.md` (+7 -1)
+>
+> </details>
+>
+> 飞轮和 README 已更新。现在我跑三类 smoke：migration audit、planner plan/compare、以及和 legacy `mocktesting` 的 query planner 对照。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `python -m retreieval_lab migration audit --round-id round_1 --output .tmp\retrieval_lab\migration_audit_round1.json --markdown-output .tmp\retrieval_lab\migration_audit_round1.md`
+> - Ran `python -m retreieval_lab planner plan --planner multi_query --query "need grounded setup without product pitch" --output .tmp\retrieval_lab\planner_plan_round1.json --planner-cache .tmp\retrieval_lab\planner_cache_round1.jsonl`
+> - Ran `python -m retreieval_lab planner compare --query "need grounded setup without product pitch" --planners rule,multi_query,hyde_card,legacy_adapter --output .tmp\retrieval_lab\planner_compare_round1.json --planner-cache .tmp\retrieval_lab\planner_cache_round1.jsonl`
+>
+> </details>
+>
+> Smoke 已通过：migration audit 显示 `mocktesting_clean=true`，planner 原生链路负向泄漏率为 0。接下来我用一小段只读 Python 对比 `retreieval_lab` 原生 planner 和 `mocktesting.query_planner` 的关键字段，确保不是各说各话。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "from retreieval_lab.planners import plan_many; from mocktesting.query_planner import plan_queries; q='need grounded setup without product pitch'; modern=plan_many([q], planner='rule', cache_path=None)['plans'][0]; legacy=plan_queries([q], planner='rule', cache_path=None).plans[0].to_dict(); keys=['desired_stage','forbidden_stage','positive_style','negative_style','positive_query']; print({k:{'modern':modern.get(k),'legacy':legacy.get(k)} for k in keys})"`
+>
+> </details>
+>
+> 对照结果很有意思：英文 `without product pitch` 这类负向风格，`retreieval_lab` 原生 planner 已能抽成 `negative_style=['product_pitch']` 并从正向检索文本移除；旧 `mocktesting.query_planner` 这条没有识别到。这是“换鸟”带来的一个实际增益。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "from retreieval_lab.planners import plan_many; from mocktesting.query_planner import plan_queries; q='不要技术展示，我真正要的是铺垫'; modern=plan_many([q], planner='rule', cache_path=None)['plans'][0]; legacy=plan_queries([q], planner='rule', cache_path=None).plans[0].to_dict(); keys=['desired_stage','forbidden_stage','positive_style','negative_style','positive_query']; print({k:{'modern':modern.get(k),'legacy':legacy.get(k)} for k in keys})"`
+>
+> </details>
+>
+> 中文 hard-negative 对照也一致：两边都能抽出 forbidden `technology_showcase` 和 desired `setup`。我再跑一个小批量 dataset planner compare，确认不是只在单条样本上可用。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab planner compare --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --planners rule,multi_query,hyde_card,legacy_adapter --output .tmp\retrieval_lab\planner_compare_test60_round1.json --planner-cache .tmp\retrieval_lab\planner_cache_round1_test60.jsonl`
+>
+> </details>
+>
+> 小批量 compare 暴露了一个好问题：某些生成 case 里同一 stage 同时被解析到 desired 和 forbidden，schema 守卫正确地拒绝了“负向 stage 泄漏进正向文本”。我现在修 planner normalization：forbidden 优先，并在校验前从正向文本/rewrites/HyDE 里移除 plan 级负向词。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+23 -3)
+>
+> </details>
+>
+> 我还会加一个空正向文本兜底：如果用户只说“不要 X”，被剥离后不能让 schema 崩掉，先降级成 `general scene`，并保留 forbidden 约束。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+2 -0)
+>
+> </details>
+>
+> 修好了 precedence/sanitizer，我重新跑 test60 planner compare。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab planner compare --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --planners rule,multi_query,hyde_card,legacy_adapter --output .tmp\retrieval_lab\planner_compare_test60_round1.json --planner-cache .tmp\retrieval_lab\planner_cache_round1_test60.jsonl`
+>
+> </details>
+>
+> test60 planner compare 现在跑通了，耗时 0.66s，没有真实 LLM。接下来读取一下关键指标，然后跑 focused/full tests。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1.json',encoding='utf-8')); print(json.dumps(d['planner_metrics'],ensure_ascii=False,indent=2))"`
+>
+> </details>
+>
+> 这个指标里 `rule` 还有 1 条 negative leak，是因为前一次失败运行已经把旧 planner version 的缓存写进了同一个 cache。这个正好验证了为什么 cache key 必须带版本。我会 bump `PLANNER_VERSION`，让 sanitizer 修复自动失效旧缓存。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+1 -1)
+>
+> </details>
+>
+> 版本已 bump。重新跑同一个 test60 compare，应该不再命中旧缓存。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab planner compare --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --planners rule,multi_query,hyde_card,legacy_adapter --output .tmp\retrieval_lab\planner_compare_test60_round1_v2.json --planner-cache .tmp\retrieval_lab\planner_cache_round1_test60.jsonl`
+>
+> </details>
+>
+> 重新跑完了。现在我读一下 planner metrics，重点看 invalid 和 negative leak。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1_v2.json',encoding='utf-8')); print(json.dumps(d['planner_metrics'],ensure_ascii=False,indent=2))"`
+>
+> </details>
+>
+> `multi_query` 和 `hyde_card` 已经 0 泄漏，但 `rule` 还有 1/60。我要定位这条 case，修掉规则层本身，而不是只让增强 planner 掩盖它。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1_v2.json',encoding='utf-8')); from retreieval_lab.planners.service import plan_has_negative_leak, negative_terms; run=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1_v2.json',encoding='utf-8')); import retreieval_lab.planners.service as s; plans=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1_v2.json',encoding='utf-8')); # load direct plans by rerun no cache
+> r=s.plan_many([row['user_input'] for row in plans['comparisons']], planner='rule', cache_path=None); 
+> for p in r['plans']:
+>     if s.plan_has_negative_leak(p):
+>         print(json.dumps({'input':p['original_text'],'positive_query':p['positive_query'],'forbidden':p.get('forbidden_stage'),'neg_style':p.get('negative_style'),'neg_constraints':p.get('negative_constraints'),'terms':s.negative_terms(p['original_text'],p),'rewrites':p.get('rewrites'),'hyde':p.get('hyde_text')},ensure_ascii=False,indent=2))"`
+>
+> </details>
+>
+> 定位到了：这条 query 说“不要强调开场气势或问题建立”，但真正要“铺垫”。我之前把“问题建立”也当成 forbidden `setup`，导致与 desired `setup` 冲突。修法是：forbidden stage 只接受更窄、更明确的 stage 别名；“问题建立”这种在负向段里先作为 soft negative constraint，不升级成 hard forbidden stage。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+25 -4)
+>
+> </details>
+>
+> 已收窄 forbidden stage alias。现在我重新检查刚才那条失败样本，再跑 test60。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "from retreieval_lab.planners import plan_many; import retreieval_lab.planners.service as s; q='画面可以借用县医院、救护车、医生、山路这类相似元素，但不要做成开场。我真正要的是铺垫，重点是建立需求、表现压力、让专业场景更有人味，不要强调开场气势或问题建立，而要让观众看到后续情节的具体铺垫'; p=plan_many([q],planner='rule',cache_path=None)['plans'][0]; print({'forbidden':p['forbidden_stage'],'desired':p['desired_stage'],'leak':s.plan_has_negative_leak(p),'positive_query':p['positive_query']})"`
+>
+> </details>
+>
+> 还有一个来源：底层 `sceneweaver.build_query_plan` 自己把“问题建立”升成了 forbidden `setup`。这里新平台要按自己的 contract 纠正旧规则，所以我会让 `retreieval_lab` 的 hard forbidden stage 只来自我们收窄后的显式解析，不继承旧 broad forbidden。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+1 -1)
+>
+> </details>
+>
+> 规则源已切换：hard forbidden stage 不再继承旧 broad 解析。重新检查同一条。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -c "from retreieval_lab.planners import plan_many; import retreieval_lab.planners.service as s; q='画面可以借用县医院、救护车、医生、山路这类相似元素，但不要做成开场。我真正要的是铺垫，重点是建立需求、表现压力、让专业场景更有人味，不要强调开场气势或问题建立，而要让观众看到后续情节的具体铺垫'; p=plan_many([q],planner='rule',cache_path=None)['plans'][0]; print({'forbidden':p['forbidden_stage'],'desired':p['desired_stage'],'leak':s.plan_has_negative_leak(p),'positive_query':p['positive_query']})"`
+>
+> </details>
+>
+> 这条现在正确了：forbidden `opening`、desired `setup`、negative leak false。因为 planner 行为又变了，我再 bump 一次 planner version，避免旧缓存污染。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/planners/service.py` (+1 -1)
+>
+> </details>
+>
+> 重新跑 test60 compare，目标是所有 native planner invalid=0、negative_leak=0。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab planner compare --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --planners rule,multi_query,hyde_card,legacy_adapter --output .tmp\retrieval_lab\planner_compare_test60_round1_v3.json --planner-cache .tmp\retrieval_lab\planner_cache_round1_test60.jsonl`
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/planner_compare_test60_round1_v3.json',encoding='utf-8')); print(json.dumps(d['planner_metrics'],ensure_ascii=False,indent=2))"`
+>
+> </details>
+>
+> 现在 test60 指标达标：三个 native planner 全部 `invalid_plan_count=0`、`negative_leak_rate=0`；legacy_adapter 仍有 4/60 泄漏，作为对照很有价值。开始跑 focused tests。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round1b -p no:cacheprovider`
+>
+> </details>
+>
+> Focused tests 49 passed。接下来跑 infra audit，确认 native-only 命令数量和空层状态。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_round1.json --markdown-output .tmp\retrieval_lab\infra_audit_round1.md`
+>
+> </details>
+>
+> Infra audit 正常：空层 0，新增 native-only planner/migration 命令已计入；legacy compat-only 仍 24，因为本轮只迁 Round 0/1。现在跑全量测试。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q --basetemp .pytest-tmp\retreieval-lab-round1-full -p no:cacheprovider`
+>
+> </details>
+>
+> 全量测试通过：185 passed。最后做本轮收口检查：`src/mocktesting` diff、git status、再跑 migration audit 作为 Round 1 报告。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `git status --short`
+> - Ran `python -m retreieval_lab migration audit --round-id round_1 --previous .tmp\retrieval_lab\migration_audit_round1.json --output .tmp\retrieval_lab\migration_audit_round1_final.json --markdown-output .tmp\retrieval_lab\migration_audit_round1_final.md`
+>
+> </details>
+>
+> Round 0/1 已收口：`mocktesting` 仍然干净，planner 层已经原生可跑。按照你的飞轮要求，我继续进入 Round 2：先做轻量 index manifest 和 artifact-first retrieval runner，不碰 embedding matrix。我要先读一下 eval dataset 的目标字段形状，决定最小候选池怎么构建。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `python -c "from retreieval_lab.datasets import read_cases; import json; cases=read_cases(split='test',limit=2); print(json.dumps(cases,ensure_ascii=False,indent=2)[:4000])"`
+> - Ran `Get-Content -Path src\retreieval_lab\ranking\workflow.py`
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\runs.py`
+> - Ran `Get-Content -Path src\retreieval_lab\evaluators\run_eval.py`
+>
+> </details>
+>
+> Round 2 我会先做“轻量原生路径”：从 eval dataset 的 target/expected_prefer 生成本地候选索引，用 planner 输出做 lexical + metadata + constraint 排序，产出标准 run artifact。它不是替代 embedding 大模型，但能让 `retrieval run` 在 `retreieval_lab` 内闭环。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/indexes/service.py` (+146 -0)
+>
+> </details>
+>
+> Index manifest builder 已加：它从 dataset target/expected_prefer 构造去重候选项和 fingerprint。继续接命令层。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/indexes/commands.py` (+34 -0)
+>
+> </details>
+>
+> Index CLI handler 已加。现在导出 index API，然后实现 retrieval runner。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/indexes/__init__.py` (+25 -1)
+>
+> </details>
+>
+> 开始实现 `retrieval run`：它会使用新 planner 和轻量 index 产出标准 `run_rows`，用于 qrels/evaluator/rerank 后续链路。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+272 -0)
+>
+> </details>
+>
+> Retrieval runner 已加入：它输出 `run_rows`，后续可以直接喂给现有 qrels/evaluator/rerank。接下来接 CLI。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/commands.py` (+47 -0)
+>
+> </details>
+>
+> CLI handler 已加；现在导出 retrieval API 并接主 CLI/alias。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/__init__.py` (+15 -0)
+>
+> </details>
+>
+> 接主入口：`index inspect/manifest`、`retrieval run/compare-legacy` 会成为 native-only 命令；旧 `build-index/search/evaluate` 仍保留 compat。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+4 -0)
+>
+> </details>
+>
+> Alias 已加。现在更新 coverage audit，让这些 native-only 命令被计入迁移 infra。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+4 -0)
+>
+> </details>
+>
+> 现在接 CLI 解析器和命令执行分支。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+7 -0)
+>
+> </details>
+>
+> 我会更新 help，让新命令在 `python -m retreieval_lab --help` 里可见。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+4 -0)
+>
+> </details>
+>
+> 接命令执行分支。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+24 -0)
+>
+> </details>
+>
+> 最后加 parser 参数：dataset/split/limit、top-k、candidate-depth、planner-cache 等。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+32 -0)
+>
+> </details>
+>
+> Round 2 代码路径已经接通；我先加测试，再跑 smoke。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+2 -0)
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+4 -0)
+>
+> </details>
+>
+> Alias 测试已扩展。现在添加 index/retrieval 行为测试，用很小的临时 dataset，避免测试依赖全量 fixture。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+106 -0)
+>
+> </details>
+>
+> Round 2 测试写好了。现在跑 focused suite，看 lightweight retrieval 是否符合预期。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round2 -p no:cacheprovider`
+>
+> </details>
+>
+> Focused tests 52 passed。现在跑真实 test split 的 index manifest 和 native retrieval run，看看速度和初步指标。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab index manifest --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --output .tmp\retrieval_lab\index_manifest_round2_test60.json`
+> - Ran `python -m retreieval_lab retrieval run --dataset src\mocktesting\eval_inputs\review_generated_inputs.json --split test --limit 60 --planner multi_query --top-k 10 --candidate-depth 100 --output .tmp\retrieval_lab\retrieval_run_round2_test60.json --planner-cache .tmp\retrieval_lab\planner_cache_round2.jsonl`
+>
+> </details>
+>
+> Native lightweight retrieval 在 60 case 上 0.55s，`target_recall_at_10=1.0`、`stage_hit_at_3=0.95`、`planner_negative_leak_rate=0`。这不是 embedding 质量结论，只说明轻量本地闭环能跑通。接下来跑一个 mocktesting legacy evaluate 做粗对照。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m mocktesting.mock_retriever evaluate --split test --limit 60 --output .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json`
+>
+> </details>
+>
+> legacy evaluate 也跑完了：60 条整体 recall 满分，hard negative expected prefer 也是 1.0。现在用新 `retrieval compare-legacy` 生成一个对照报告，虽然两边指标字段不同，但会把 summary 并排留档。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab retrieval compare-legacy --native .tmp\retrieval_lab\retrieval_run_round2_test60.json --legacy .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json --output .tmp\retrieval_lab\retrieval_compare_legacy_round2_test60.json`
+>
+> </details>
+>
+> 这个对照报告发现一个格式问题：legacy evaluate 的指标在 `overall`，不是 `summary`，所以 delta_count 为 0。我会把 compare-legacy 做得更兼容：优先读 `summary`，没有就读 `overall`。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+12 -2)
+>
+> </details>
+>
+> compare-legacy 已兼容 legacy `overall`。重新生成对照。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab retrieval compare-legacy --native .tmp\retrieval_lab\retrieval_run_round2_test60.json --legacy .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json --output .tmp\retrieval_lab\retrieval_compare_legacy_round2_test60.json`
+>
+> </details>
+>
+> 字段名仍不重合：native 是 `target_recall_at_10`，legacy 是 `recall_at_10`。我会加一层 metric alias 归一化，让对照能算 delta。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+17 -2)
+>
+> </details>
+>
+> 重跑 compare-legacy。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `python -m retreieval_lab retrieval compare-legacy --native .tmp\retrieval_lab\retrieval_run_round2_test60.json --legacy .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json --output .tmp\retrieval_lab\retrieval_compare_legacy_round2_test60.json`
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/retrieval_compare_legacy_round2_test60.json',encoding='utf-8')); print(json.dumps({'native_keys':list(d['native_summary'].keys()),'legacy_keys':list(d['legacy_summary'].keys()),'delta':d['delta']},ensure_ascii=False,indent=2))"`
+>
+> </details>
+>
+> legacy summary 为空，说明 `mocktesting evaluate --output` 可能没有写我们以为的 JSON 文件，只是 stdout 打印。我要确认文件是否存在/内容是什么；如果不存在，就用 stdout 报告另存一份作为对照。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `if (Test-Path .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json) { Get-Content .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json -TotalCount 5 }`
+> - Ran `Test-Path .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json; if (Test-Path .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json) { Get-Item .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json | Select-Object FullName,Length }`
+> - Ran `python -c "import json; d=json.load(open('.tmp/retrieval_lab/mocktesting_evaluate_round2_test60.json',encoding='utf-8')); print(d.keys()); print(json.dumps({k:d[k] for k in d.keys() if k in ['overall','summary','metrics','case_count','method']},ensure_ascii=False,indent=2)[:1000])"`
+>
+> </details>
+>
+> mocktesting 文件实际是 `metrics.overall`。我会让 compare-legacy 也兼容这个结构。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+3 -0)
+>
+> </details>
+>
+> 再次生成 compare-legacy，这次应该有 delta。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab retrieval compare-legacy --native .tmp\retrieval_lab\retrieval_run_round2_test60.json --legacy .tmp\retrieval_lab\mocktesting_evaluate_round2_test60.json --output .tmp\retrieval_lab\retrieval_compare_legacy_round2_test60.json`
+>
+> </details>
+>
+> 对照报告现在有可计算 delta 了。继续跑 focused tests，确保刚才的 compare 兼容修改没有破坏。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round2b -p no:cacheprovider`
+>
+> </details>
+>
+> Round 2 已自检通过。继续 Round 3，但先做一个稳健切片：不重写 heavy ranking，而是把已有 artifact-level workflow rerank 扩展成“一次比较多个 workflow”的原生命令 `workflow compare-runs`，让 ranking 工作流可以在 `retreieval_lab` 内批量对比并可选接 qrels 评估。
+>
+> 我会复用现有 `rerank_run_rows_by_workflow`，避免重复排序逻辑；新增命令只负责编排多个 ranking key 和指标报告。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/workflow.py` (+87 -0)
+>
+> </details>
+>
+> Workflow compare service 已加。现在导出它并接 CLI。
+>
+> <details><summary>Edited 2 files, ran 1 command</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\ranking\__init__.py`
+> - Wrote `./src/retreieval_lab/ranking/__init__.py` (+6 -0)
+> - Wrote `./src/retreieval_lab/compat.py` (+1 -0)
+>
+> </details>
+>
+> 我保留 `workflow compare` 指向旧 compat，因为它会现场跑重检索；新增 `workflow compare-runs` 是 artifact-first 原生比较。现在更新 coverage 和 CLI。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+8 -6)
+>
+> </details>
+>
+> coverage 文件位置有点不同，我先定位 NATIVE_COMMANDS 尾部再补。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\experiments\coverage.py -TotalCount 70`
+>
+> </details>
+>
+> 补丁位置找到了，继续。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+2 -0)
+>
+> </details>
+>
+> 现在接 CLI imports 和 parser。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+2 -0)
+>
+> </details>
+>
+> 更新 help。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+2 -1)
+>
+> </details>
+>
+> 接命令执行分支。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+6 -0)
+>
+> </details>
+>
+> 加 parser。
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+10 -0)
+> - Ran `rg -n "workflow" tests\test_retreieval_lab_cli.py`
+>
+> </details>
+>
+> 测试里已经有 workflow rerank 的基础样本，我会在它旁边加一个 compare-runs 测试。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+5 -0)
+>
+> </details>
+>
+> Alias 测试已补。现在加 CLI 行为测试。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+42 -6)
+>
+> </details>
+>
+> 测试插入位置有偏差，我先看 workflow 测试附近。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -Path tests\test_retreieval_lab_cli.py | Select-Object -Skip 780 -First 90`
+>
+> </details>
+>
+> 插入到 workflow rerank CLI 测试后面。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+36 -0)
+>
+> </details>
+>
+> Round 3 测试已加。现在跑 focused suite。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round3 -p no:cacheprovider`
+>
+> </details>
+>
+> 测试在 import 阶段发现 `workflow.py` 的 `__all__` 缩进有误，这是我刚才补丁插入位置的问题。马上修。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -Path src\retreieval_lab\ranking\workflow.py | Select-Object -Last 80`
+>
+> </details>
+>
+> 确实是 `parse_ranking_keys` 落到列表外面了。修正 `__all__`。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/ranking/workflow.py` (+1 -1)
+>
+> </details>
+>
+> 重新跑 focused。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round3b -p no:cacheprovider`
+>
+> </details>
+>
+> Focused 53 passed。现在用 Round2 的 native retrieval run 做一次 `workflow compare-runs` smoke。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `python -m retreieval_lab workflow compare-runs --runs .tmp\retrieval_lab\retrieval_run_round2_test60.json --ranking-keys lexical_only,lexical_constraints,hybrid_rrf_constraints_signature,adaptive_signature --output .tmp\retrieval_lab\workflow_compare_runs_round3_test60.json`
+>
+> </details>
+>
+> workflow compare-runs 在 60 case 上 0.147s，生成 4 个 workflow run。现在我把 README/flywheel 的推荐链路补上这个原生命令。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+1 -0)
+>
+> </details>
+>
+> 再把飞轮也接上：在 run rerank 后新增 workflow compare-runs。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+14 -8)
+>
+> </details>
+>
+> 飞轮更新完。现在跑 focused tests、infra audit、full tests。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `pytest -q tests\test_retreieval_lab_cli.py --basetemp .pytest-tmp\retreieval-lab-round3c -p no:cacheprovider`
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_round3.json --markdown-output .tmp\retrieval_lab\infra_audit_round3.md`
+>
+> </details>
+>
+> Round 3 focused tests 53 passed；infra coverage 从 0.314286 提升到 0.342857，compat-only 从 24 降到 23。现在跑全量。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `pytest -q --basetemp .pytest-tmp\retreieval-lab-round3-full -p no:cacheprovider`
+>
+> </details>
+>
+> 全量 189 passed。最后做 Round 3 迁移审计和 baseline diff 检查。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `git diff -- src\mocktesting`
+> - Ran `python -m retreieval_lab migration audit --round-id round_3 --previous .tmp\retrieval_lab\migration_audit_round1_final.json --output .tmp\retrieval_lab\migration_audit_round3_final.json --markdown-output .tmp\retrieval_lab\migration_audit_round3_final.md`
+> - Ran `git status --short`
+>
+> </details>
+</details>
+
+已按飞轮推进了前三轮，没有动 `src/mocktesting`。它仍然是干净对照组：`git diff -- src\mocktesting` 为空。
+
+**本轮完成**
+Round 0：迁移门禁
+新增 `migration audit`，每轮可自动检查：
+
+- `mocktesting_clean`
+- native / partial / compat-only / native-only 数量
+- coverage delta
+- migration report Markdown/JSON
+
+命令示例：
+
+```powershell
+python -m retreieval_lab migration audit --round-id round_3
+```
+
+Round 1：Planner 真正换鸟
+新增原生 planner 层：
+
+- `rule`
+- `multi_query`
+- `hyde_card`
+- `fake_llm`
+- `legacy_adapter`
+
+新增 CLI：
+
+```powershell
+python -m retreieval_lab planner plan
+python -m retreieval_lab planner compare
+python -m retreieval_lab planner audit-cache
+```
+
+对照结果：`planner compare --limit 60` 中，原生 `rule/multi_query/hyde_card` 都是：
+
+```text
+invalid_plan_count = 0
+negative_leak_rate = 0
+```
+
+而 `legacy_adapter` 是：
+
+```text
+negative_leak_rate = 0.066667
+```
+
+也就是说新 planner 对“负向词不要进正向检索文本”的约束更干净。
+
+Round 2：Index / Retrieval 轻量原生闭环
+新增：
+
+```powershell
+python -m retreieval_lab index manifest
+python -m retreieval_lab retrieval run
+python -m retreieval_lab retrieval compare-legacy
+```
+
+在 test 60 上 native lightweight retrieval：
+
+```text
+elapsed_seconds = 0.552199
+target_recall_at_10 = 1.0
+stage_hit_at_3 = 0.95
+planner_negative_leak_rate = 0
+```
+
+同时跑了 `mocktesting evaluate --split test --limit 60` 作为对照，legacy 整体 recall 仍是满分。新 native retrieval 不是要替代 embedding 质量，而是先让 `retreieval_lab` 有独立、快速、可验证的最小检索闭环。
+
+Round 3：Workflow 多路排序原生比较
+新增：
+
+```powershell
+python -m retreieval_lab workflow compare-runs
+```
+
+它可以对 saved run artifact 一次比较多个 ranking key。用 Round2 的 60 case native run 测试：
+
+```text
+run_count = 4
+case_count = 60
+row_count = 240
+elapsed_seconds = 0.147
+```
+
+**当前迁移状态**
+最新 audit：
+
+```text
+legacy_command_count = 35
+native_command_count = 7
+partial_command_count = 5
+compat_only_command_count = 23
+native_only_command_count = 21
+empty_layer_count = 0
+coverage_rate = 0.342857
+mocktesting_clean = true
+```
+
+相比之前，`compat_only` 从 24 降到 23，`coverage_rate` 从 0.314286 到 0.342857。
+
+**验证**
+已跑：
+
+```text
+tests/test_retreieval_lab_cli.py: 53 passed
+full pytest: 189 passed, 1633 warnings
+```
+
+主要报告已生成：
+
+- [migration_audit_round3_final.json](./.tmp/retrieval_lab/migration_audit_round3_final.json)
+- [planner_compare_test60_round1_v3.json](./.tmp/retrieval_lab/planner_compare_test60_round1_v3.json)
+- [retrieval_run_round2_test60.json](./.tmp/retrieval_lab/retrieval_run_round2_test60.json)
+- [workflow_compare_runs_round3_test60.json](./.tmp/retrieval_lab/workflow_compare_runs_round3_test60.json)
+- [infra_audit_round3.json](./.tmp/retrieval_lab/infra_audit_round3.json)
+
+**判断**
+这次是真正推进了“腾笼换鸟”：planner、index manifest、native retrieval run、workflow compare 都不是复制 `mocktesting` monolith，而是按 schema/artifact-first 的方式重建了平台边界。
+
+还没完成的是 Round 4/5：fuzzy/paraphrase 多解评估、scene signature 实验、rerank gate、LLM adapter。下一轮最值得做 Round 4，把 `evaluate-fuzzy-multirelevance / validate-paraphrase-stress / validate-scene-signature` 的核心评估闭环迁到 `retreieval_lab`。
+
+> 这个报告以最严苛的标准进行分析。你先了解一下这个论断的信源，然后再看报告。前半部分是github开源项目与conference最佳实践。后半部分是企业级实现。不过考虑到，我发送的D:\WorkSpace\Codex\SceneWeaver\src\retreieval_lab\README.md 用于报告项目开发脉络，所以很多mock或者硬编码的情况尚未报告，可能评估机构对这个项目的实际完成度更乐观。
+>
+> 我觉得人工标注的可以完全不考虑，以llm为准就好了。企业级实现过重的实践也不考虑。
+>
+> 然后你自行分析，按照我们的实验意图，这个报告有什么是值得借鉴的，后续可以去做什么？
+>
+> User context
+>
+> Attachments:
+> - 论断的信源.md: `D:/Downloads/论断的信源.md`
+> - deep-research-report.md: `D:/Downloads/deep-research-report.md`
+
+<details><summary>11 previous messages</summary>
+
+> 我先把两个报告和当前 `retreieval_lab` README 都读一遍，再按“实验意图”筛掉人工标注和过重企业实践，只留下值得吸收的东西。重点会放在：哪些建议能增强我们的检索实验平台，而不是把项目拖成企业搜索中台。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Path 'D:\Downloads\论断的信源.md'`
+> - Ran `Get-Content -Path 'D:\Downloads\deep-research-report.md'`
+> - Ran `Get-Content -Path 'D:\WorkSpace\Codex\SceneWeaver\src\retreieval_lab\README.md'`
+> - Ran `python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_for_report_review.json`
+>
+> </details>
+>
+> 我刚才第一遍读到的是 Windows PowerShell 把 UTF-8 当本地编码解了，所以内容出现了乱码；我再用显式 UTF-8 读取关键内容，避免误判报告结论。
+>
+> Stream error
+>
+> Reconnecting 1/5
+> stream disconnected before completion: stream closed before response.completed
+>
+> 刚才 PowerShell 默认编码把中文读成了乱码，我已经确认这是读取方式问题，不是报告内容本身。现在我用 UTF-8 重读关键文件，再做判断。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content -Path 'D:\Downloads\论断的信源.md' -Encoding UTF8`
+> - Ran `Get-Content -Path 'D:\Downloads\deep-research-report.md' -Encoding UTF8`
+>
+> </details>
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我先把两个外部报告和当前 `retreieval_lab` 的 README / audit 摘要对上读一遍。这样可以把“报告基于 README 产生的乐观判断”和“代码实际迁移状态”分开，不会把过重的企业实践一股脑塞进下一步。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `Get-Content -Raw -LiteralPath 'D:\Downloads\deep-research-report.md'`
+> - Ran `Get-Content -Raw -LiteralPath 'D:\Downloads\论断的信源.md'`
+> - Ran `Get-Content -Raw -LiteralPath 'D:\WorkSpace\Codex\SceneWeaver\src\retreieval_lab\README.md'`
+> - Ran `if (Test-Path '.tmp\retrieval_lab\migration_audit_round3_final.json') { Get-Content -Raw -LiteralPath '.tmp\retrieval_lab\migration_audit_round3_final.json' } elseif (Test-Path '.tmp\retrieval_lab\infra_audit_for_report_review.json') { Get-Content -Raw -LiteralPath '.tmp\retrieval_lab\infra_audit_for_report_review.json' }`
+>
+> </details>
+>
+> 我读到了，但 PowerShell 这边把中文按错误编码吐出来了。为了不把乱码当证据，我再用 UTF-8 输出重读关键段落，同时抽一下项目真实 audit 的数值。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 -LiteralPath 'D:\Downloads\论断的信源.md'`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 -LiteralPath 'D:\Downloads\deep-research-report.md'`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration audit --round-id report_review_tmp --output .tmp\retrieval_lab\migration_audit_report_review_tmp.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab infra audit`
+>
+> </details>
+</details>
+
+我按最严苛标准看完了。结论先说：这份报告**方向基本对，但证据等级不能按“研究报告”读，只能按“架构成熟度审计”读**。
+
+[论断的信源.md](D:/Downloads/论断的信源.md) 自己已经承认：它不是实时检索、没有逐条论文/文档引用链，而是基于 IR / RAG / infra 常识做的 gap analysis。所以它能用来指导方向，但不能当作“某论文证明我们必须这么做”的证据。
+
+**我对报告的判断**
+
+报告最有价值的一句话是：
+
+> evaluation infra > retrieval engine 真实性
+
+这个判断对我们当前项目是成立的。尤其从现状看：
+
+- `retreieval_lab` 已经有 schema、qrels、metrics、artifact、capability cycle、migration audit、planner、run artifact rerank 这些实验平台骨架。
+- 但按 audit 看，旧 `mocktesting` 命令里仍有 `23` 个 compat-only，真正替代旧实验命令的 native 只有 `7` 个，partial `5` 个。
+- 也就是说：**实验平台的笼子已经换得不错，但里面那只“真实检索执行鸟”还没有完全迁进去。**
+
+不过报告也有几个地方要降权：
+
+- 它基于 README 判断，确实可能高估了完成度。
+- 它推荐的人类标注队列，对你的目标不必要；我们可以用 LLM judge + qrels audit 替代。
+- 它推荐的安全、运维、Prometheus、生产 A/B、多租户、商业部署，目前太重，不该进入近期主线。
+- 它把“企业级 production RAG”作为目标，但我们现在的真实目标是：**检索实验平台成熟化 + 核心检索能力迭代**，不是上线一个企业搜索 SaaS。
+
+**值得借鉴的部分**
+
+我建议吸收这几类：
+
+1. **LLM-as-Judge qrels，而不是人工标注**
+
+   保留 qrels / pooling / adjudication 的结构，但 judge 来源改成 LLM。重点不是人工界面，而是：
+
+   - judge prompt version
+   - judge model
+   - confidence
+   - disagreement / conflict
+   - cost / latency
+   - bootstrap vs LLM 覆盖率
+
+   这比“人工标注平台”更符合你的开发节奏。
+
+2. **真实 reranker 上限验证**
+
+   现在最需要知道的是：问题到底是召回不够，还是 top20 里有答案但排序排错。
+
+   所以要继续做：
+
+   - oracle rerank@20
+   - rule rerank@20
+   - LLM sample rerank@20
+   - gated rerank only for low-confidence / fuzzy / style-risk cases
+
+   如果 oracle 高，说明值得做 reranker；如果 oracle 低，说明要回到 query understanding / candidate recall。
+
+3. **native retrieval execution**
+
+   这是报告最重要、也最该采纳的批评。
+
+   不是继续堆报告，而是让 `retreieval_lab` 里面有真正原生的：
+
+   - BM25 / sparse lexical retrieval
+   - cached dense vector retrieval
+   - RRF fusion
+   - metadata / style / constraint filter
+   - top-k candidate generation
+   - latency benchmark
+
+   这一步完成后，实验结论才更有“系统真实性”。
+
+4. **hard negative mining**
+
+   这个非常适合我们当前问题。尤其是：
+
+   - 视觉相似但 stage 错
+   - 风格相似但“广告感 / 大厂味 / 炫技”
+   - fuzzy query 下多个近似答案
+   - query planner 分歧大的 case
+
+   这些应该自动进 hard negative pool，成为下一轮回归集。
+
+5. **CI-lite eval gate**
+
+   不需要完整企业 CI/CD，但应该有一个轻量 gate：
+
+   - 不调用真实 LLM
+   - 固定小样本
+   - 检查 nDCG / MRR / style violation / negative leak / latency
+   - 失败就输出是哪类能力退化
+
+   这能防止后续“优化一个指标，偷偷打坏另一个指标”。
+
+**不建议近期做的部分**
+
+这些我会暂时排除：
+
+- 人工标注系统
+- 生产在线 A/B
+- Prometheus / OpenTelemetry / Grafana
+- 多租户、安全、权限、部署、SLA
+- 外部向量数据库
+- 大规模商业化 API 层
+
+它们不是错，而是现在会把主线带偏。
+
+**当前项目严苛评分**
+
+我会这样给：
+
+- 实验平台骨架：`8/10`
+- 评测协议成熟度：`7.5/10`
+- 检索核心真实性：`5.5/10`
+- 能否指导下一轮优化：`7/10`
+- 距离“可信检索实验平台”：还差一层真实 native retrieval + LLM judge 可信闭环
+
+所以不是差，而是现在处在一个很典型的中间态：**评估系统已经挺聪明了，但被评估的检索核心还不够独立。**
+
+**我建议下一阶段做什么**
+
+下一轮不要再扩企业 infra，直接做这四件：
+
+1. 在 `retreieval_lab` 做原生 hybrid retrieval runtime：BM25 + cached dense + RRF + constraints。
+2. 做 LLM judge qrels pipeline：不考虑人工标注，但记录 judge confidence、版本、冲突。
+3. 做 rerank upper-bound 对照：oracle vs rule vs LLM sample，判断瓶颈是召回还是排序。
+4. 做 hard negative mining 原生化：把失败样本自动变成下一轮回归集。
+
+一句话：**报告可以借，但要瘦身。借 TREC/BEIR 的评测严谨性，借 LangSmith/MLflow 的实验记录，借 Azure/Pinecone 的 hybrid + rerank 思路；不要借企业运维包袱。**
+
+> 你认为目前是否已经将mocktesting重构90%以上了？
+
+<details><summary>2 previous messages</summary>
+
+> 我先用当前仓库状态跑一下 `retreieval_lab` 的 audit，不靠记忆判断。这个问题最容易被 README 的“架构已搭好”误导，所以我会按命令覆盖和能力迁移两层来看。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab infra audit`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration audit --round-id status_check --output .tmp\retrieval_lab\migration_audit_status_check.json`
+>
+> </details>
+</details>
+
+不，**还不能说已经重构了 90% 以上**。严格按当前 audit 看，应该是：
+
+- `mocktesting` 本身没有被改，仍然干净，作为对照组成立。
+- `retreieval_lab` 的“平台骨架 / infra 层”已经铺得很完整：`15/15` 个 layer 都有实现，空层是 `0`。
+- 但如果按“mocktesting 里的能力是否已经原生迁入并重构”算，目前只有 `7/35` 个 legacy command 是 fully native，`5/35` 是 partial，`23/35` 仍是 compat-only。
+- 当前 coverage 是 `0.342857`，也就是大约 **34%**，不是 90%。
+
+所以更准确的说法是：
+
+> **笼子已经换了很多，鸟还没完全搬完。**
+
+现在的 `retreieval_lab` 已经不是空架子，schema、artifact、qrels、metrics、planner、capability cycle、migration audit、部分 retrieval/run workflow 都有了。但核心实验能力里，像 `evaluate`、`evaluate-hybrid`、`compare-query-understanding`、`validate-fuzzy-understanding`、`validate-paraphrase-stress`、`compare-strong-baselines`、`compare-rerank-upper-bound`、`build-index` 这些仍然主要依赖兼容层。
+
+我刚生成的当前状态报告在这里：[migration_audit_status_check.json](./.tmp/retrieval_lab/migration_audit_status_check.json)。
+
+如果要达到“90% 重构”，我会要求至少满足这几个条件：
+
+1. `35` 个 legacy command 里至少 `31-32` 个 native 或 partial-native。
+2. `evaluate / fuzzy / paraphrase / query understanding / rerank upper bound / build-index` 这些核心命令必须原生。
+3. compat-only 只剩少数历史命令或低价值命令。
+4. native retrieval runtime 真正负责 BM25 / vector cache / RRF / constraints / signature，而不是只从 legacy report 转 artifact。
+
+所以当前我会打分：**infra 架构成熟度 75%-80%，mocktesting 能力迁移重构度 34%-40%，核心检索执行独立性 45%-55%**。还没到 90%，但方向是对的。
+
+> 怎么还是这么少？那还需要多久才能迁移完呢？
+
+少，是因为这个 `34%` 是**很严格的 command parity 口径**，不是“代码量迁移比例”。
+
+现在有三个口径：
+
+1. **平台骨架口径**：已经很高
+   `15/15` 个 layer 都有实现，schema / qrels / metrics / artifact / planner / reports / capability cycle 都在了。这个大概可以说 `75%-80%`。
+
+2. **mocktesting 命令替代口径**：还低
+   `35` 个旧命令里，只有 `7` 个 fully native，`5` 个 partial，`23` 个 compat-only。audit 的 `34%` 主要来自这个口径。
+
+3. **检索核心独立性口径**：中等偏低
+   真正最重的 `evaluate / evaluate-hybrid / fuzzy / paraphrase / query-understanding / rerank-upper-bound / build-index / search` 还没完全 native，所以不能说完成。
+
+所以不是白做了，而是现在完成的是“新平台地基 + 一部分轻量能力”，剩下的是最重、最有价值、也最难的检索执行与实验命令迁移。
+
+**还需要多久**
+
+如果目标是“能独立支撑主要实验，不再日常依赖 mocktesting”，我估计还要 **1-2 周集中迭代**。
+
+如果目标是“audit 上接近 90% command-level native/partial”，我估计要 **3-5 周**。
+
+如果目标是“完全摆脱 mocktesting，包含 embedding cache、build-index、所有历史命令完全等价”，那更像 **6-8 周**，而且我不建议把这个当近期目标。因为 `mocktesting` 本来就应该保留为对照组，不需要消灭它。
+
+我建议分三段走：
+
+**第一段：把分数拉到 55%-60%**
+迁移那些已经有 infra 支撑、但命令还 compat 的部分：
+
+- `evaluate-graded`
+- `evaluate-pooled`
+- `evaluate-fuzzy-multirelevance`
+- `compare-query-understanding`
+- `validate-fuzzy-understanding`
+- `validate-paraphrase-stress`
+- `validate-style-negatives`
+
+这段大约 **3-5 天**。
+
+**第二段：把分数拉到 70%-80%**
+做真正 native retrieval runtime：
+
+- native BM25
+- cached dense retrieval
+- RRF fusion
+- constraint/signature scoring
+- native `evaluate-hybrid`
+- native `search`
+- native `compare-ranking-workflows`
+
+这段大约 **1-2 周**。
+
+**第三段：冲 90%**
+迁移更复杂的上界验证和实验闭环：
+
+- `compare-strong-baselines`
+- `compare-rerank-upper-bound`
+- `validate-rerank-gate`
+- `mine-hard-negatives`
+- `build-index`
+- `compact-embedding-cache`
+
+这段大约 **1-2 周**。
+
+我的真实判断是：**再做 2-3 轮高质量迁移，项目就会从“实验平台骨架很好”变成“核心实验可以主要靠 Retrieval Lab 自己跑”。**
+到那时即使 audit 还没到 90%，实际价值也会明显超过现在。90% 是漂亮数字，但更关键的是先把 `fuzzy / paraphrase / hybrid / rerank upper bound / hard negative` 这条主链迁出来。
+
+> 你做计划吧，自己执行，直到自检验完全能够替代mocktesting
+
+<details><summary>9 previous messages</summary>
+
+> 我先按“完全替代”的最严格口径看当前缺口：不是看目录有没有，而是看旧 `mocktesting` 每个高价值命令是否已有 native 路径、是否仍走 compat、以及自检验门禁是否能证明替代完成。接下来我只做只读探查，不改文件。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git status --short`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem -Recurse -File src\retreieval_lab | Select-Object FullName`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; rg -n "compat_only|legacy_command|fully_native|partial|mocktesting|compare-query-understanding|validate-fuzzy|evaluate-hybrid|build-index" src\retreieval_lab tests\test_retreieval_lab_cli.py`
+>
+> </details>
+>
+> 我看到关键事实了：现在 `retreieval_lab` 是未提交的新子项目，`src/mocktesting` 没有显示为 dirty；当前 strict command coverage 约 `34%`，缺口主要集中在重检索、fuzzy/paraphrase、rerank upper bound、build-index 这些“真核心”。在计划收口前，我只需要锁定“完全替代”的验收口径，避免后续把力气花到你不想要的地方。
+>
+> User input response
+>
+> - 你希望“完全能够替代 mocktesting”的最终验收口径是哪一种？
+>   - 核心实验替代 (Recommended)
+>
+> 好，那我按“核心实验替代”定目标：不是清零 `mocktesting`，而是让 Retrieval Lab 原生承担日常核心实验，`mocktesting` 只保留为对照和历史回归。现在我再快速看一下命令映射和现有 retrieval/qrels/ranking 边界，计划会按最短路径把主链迁出来。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\ranking\workflow.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\compat.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\qrels\commands.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\retrieval\service.py`
+>
+> </details>
+>
+> Stream error
+>
+> Reconnecting 1/5
+> stream disconnected before completion: stream closed before response.completed
+>
+> Plan
+>
+> # Retrieval Lab 核心替代 Mocktesting 多轮迁移计划
+>
+> ## Summary
+>
+> 目标口径采用你刚选的 **核心实验替代**：`src/mocktesting` 保持不变，继续作为对照组；但日常检索实验主链必须能由 `retreieval_lab` 原生完成，不再依赖 compat 后端。
+>
+> 最终验收不是追求所有历史命令清零，而是达成：
+>
+> - `evaluate / search / evaluate-hybrid / compare-ranking-workflows`
+> - `compare-query-understanding`
+> - `validate-fuzzy-understanding / validate-paraphrase-stress`
+> - `evaluate-fuzzy-multirelevance / evaluate-graded / evaluate-pooled`
+> - `compare-strong-baselines / compare-rerank-upper-bound`
+> - `validate-style-negatives / validate-style-risk-mining / mine-hard-negatives`
+>
+> 这些核心命令全部 native 或 artifact-native，`mocktesting` 只用于 parity 对照。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移门禁与替代定义固化
+>
+> - 新增 `migration certify` 自检命令，输出：
+>   - `mocktesting_clean`
+>   - critical command native/partial/compat 状态
+>   - core replacement score
+>   - parity report paths
+>   - test result summary
+> - 将 audit 的“总体 coverage”拆成两个分数：
+>   - `legacy_command_coverage`
+>   - `core_experiment_replacement_coverage`
+> - 验收：
+>   - `src/mocktesting` 无 diff。
+>   - critical command list 固定进入 migration report。
+>   - 后续每轮都自动生成 `.tmp/retrieval_lab/migration_certification_<round>.json/md`。
+>
+> ### Round 1：原生 Retrieval Runtime
+>
+> - 在 `retreieval_lab` 内实现真正可复用的本地检索 runtime：
+>   - index item registry
+>   - BM25 / sparse lexical scorer
+>   - cached dense vector scorer，优先复用现有本地 embedding/cache artifact；没有 cache 时降级 lexical，不调用外部服务
+>   - RRF fusion
+>   - constraint / style / scene signature scoring
+>   - metadata filter / forbidden veto
+> - 替代当前 `native_lightweight` 的简单 overlap 排序，保留旧 lightweight 作为 debug baseline。
+> - 新增或升级 CLI：
+>   - `index build`
+>   - `index inspect`
+>   - `retrieval search`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 验收：
+>   - `retrieval run --split test --limit 60` 生成标准 `run_rows`。
+>   - critical retrieval path 不 import `mocktesting.mock_retriever`。
+>   - 与 mocktesting 代表性输出对比：row count、top-k shape、target rank、stage hit、style violation 可解释。
+>
+> ### Round 2：核心 Evaluation 命令原生化
+>
+> - 用 Round 1 的 native retrieval runtime 迁移：
+>   - `evaluate`
+>   - `evaluate-hybrid`
+>   - `evaluate-graded`
+>   - `evaluate-pooled`
+>   - `compare-ranking-workflows`
+>   - `validate-ranking-keys`
+> - 评估统一走 artifact-first：
+>   - retrieval 先产出 `run_rows`
+>   - workflow rerank 在 `run_rows` 上派生
+>   - qrels / metrics / report 独立计算
+> - 默认报告保留 JSON + Markdown；debug 大字段默认关闭。
+> - 验收：
+>   - 上述命令不再走 compat。
+>   - `compare-ranking-workflows --split test --limit 60` 与 mocktesting 指标差异有 parity report。
+>   - latency、case count、run count、metric deltas 写入实验记录。
+>
+> ### Round 3：Query Understanding / Fuzzy / Paraphrase 主链迁移
+>
+> - 以现有 native planner registry 为入口，迁移：
+>   - `compare-query-understanding`
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `evaluate-fuzzy-multirelevance`
+>   - `validate-scene-signature`
+> - fuzzy 评估默认使用 graded / multi-relevance 指标：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - `multi_query`、`hyde_card`、`rule` planner 都必须通过 negative leak 检查。
+> - 验收：
+>   - fuzzy/paraphrase 命令不走 compat。
+>   - `negative_leak_rate = 0`。
+>   - 报告能区分 scene-level、purpose-level、stage-level 成功。
+>   - 与 mocktesting 对照生成 planner delta 和 metric delta。
+>
+> ### Round 4：Rerank / LLM Judge / Hard Negative 原生化
+>
+> - 迁移：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+>   - `compare-rerank-gates`
+>   - `validate-style-negatives`
+>   - `validate-style-risk-mining`
+>   - `mine-hard-negatives`
+> - LLM 默认关闭，只支持显式 sample：
+>   - `--llm-sample-size`
+>   - `--llm-rerank-top-n`
+>   - `--judge-cache`
+>   - fake client 用于测试
+> - 不做人工标注队列；qrels 裁决以 LLM votes 为主，保留 bootstrap / llm / conflict metadata。
+> - hard negative mining 从 native run rows 中抽取：
+>   - style violation
+>   - forbidden stage near miss
+>   - top1 wins target 的 close-call case
+>   - planner disagreement
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - upper-bound 报告明确判断瓶颈：recall / rerank / query understanding / qrels trust。
+>   - hard negative pool 可回灌下一轮 eval。
+>
+> ### Round 5：核心替代认证与文档收口
+>
+> - 更新 `retrieval-flywheel-guide`，默认使用 native 主链：
+>   - build native index
+>   - run native retrieval
+>   - compare workflows
+>   - build/pool qrels
+>   - evaluate fuzzy/paraphrase
+>   - mine hard negatives
+>   - compare rerank upper bound
+>   - record capability cycle
+>   - migration certify
+> - 更新 README 当前状态，明确：
+>   - mocktesting 是 baseline，不是运行依赖
+>   - core experiments 已 native
+>   - remaining compat-only 是历史/低优先命令
+> - 最终认证标准：
+>   - critical command compat count = `0`
+>   - `mocktesting_clean = true`
+>   - focused tests pass
+>   - full tests pass
+>   - native-vs-mocktesting parity report exists for each critical group
+>   - capability cycle 能记录本轮相对 origin 的能力变化
+>
+> ## Test Plan
+>
+> - 每轮固定测试：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `python -m retreieval_lab infra audit`
+>   - `python -m retreieval_lab migration audit`
+>   - `python -m retreieval_lab migration certify`
+>   - `pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp/retrieval_lab_round_<n> -p no:cacheprovider`
+> - 每个核心迁移命令新增 CLI 测试：
+>   - 默认不 import / call `mocktesting.mock_retriever`。
+>   - 输出 schema 可被 `schema validate` 接受。
+>   - JSON report 包含 `experiment.config`、`git_sha`、`elapsed_seconds`、`fingerprint`。
+> - 每轮至少跑一组 parity：
+>   - native command vs corresponding mocktesting command
+>   - 比较 summary metrics、case count、top-k shape、failure categories
+>   - 差异必须进入 parity report，不要求逐条排序完全一致。
+> - 最终 full test：
+>   - `pytest -q --basetemp .pytest-tmp/retrieval_lab_final -p no:cacheprovider`
+>   - 通过后生成 final certification report。
+>
+> ## Assumptions
+>
+> - `src/mocktesting` 永远不改、不删，只作为对照组。
+> - “完全替代”定义为核心实验主链 native，不追求所有历史命令零 compat。
+> - 不接外部向量数据库，不训练模型。
+> - LLM judge / rerank 只在显式 sample 参数下运行，默认关闭。
+> - 人工标注流程不进入主线；qrels 可信度用 bootstrap + LLM votes + conflict audit 解决。
+> - 优先迁移能提升实验真实性的能力，低价值历史命令只保留 compat 或标记 deprecated。
+>
+> Plan implementation
+>
+> Status: completed
+> # Retrieval Lab 核心替代 Mocktesting 多轮迁移计划
+>
+> ## Summary
+>
+> 目标口径采用你刚选的 **核心实验替代**：`src/mocktesting` 保持不变，继续作为对照组；但日常检索实验主链必须能由 `retreieval_lab` 原生完成，不再依赖 compat 后端。
+>
+> 最终验收不是追求所有历史命令清零，而是达成：
+>
+> - `evaluate / search / evaluate-hybrid / compare-ranking-workflows`
+> - `compare-query-understanding`
+> - `validate-fuzzy-understanding / validate-paraphrase-stress`
+> - `evaluate-fuzzy-multirelevance / evaluate-graded / evaluate-pooled`
+> - `compare-strong-baselines / compare-rerank-upper-bound`
+> - `validate-style-negatives / validate-style-risk-mining / mine-hard-negatives`
+>
+> 这些核心命令全部 native 或 artifact-native，`mocktesting` 只用于 parity 对照。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移门禁与替代定义固化
+>
+> - 新增 `migration certify` 自检命令，输出：
+>   - `mocktesting_clean`
+>   - critical command native/partial/compat 状态
+>   - core replacement score
+>   - parity report paths
+>   - test result summary
+> - 将 audit 的“总体 coverage”拆成两个分数：
+>   - `legacy_command_coverage`
+>   - `core_experiment_replacement_coverage`
+> - 验收：
+>   - `src/mocktesting` 无 diff。
+>   - critical command list 固定进入 migration report。
+>   - 后续每轮都自动生成 `.tmp/retrieval_lab/migration_certification_<round>.json/md`。
+>
+> ### Round 1：原生 Retrieval Runtime
+>
+> - 在 `retreieval_lab` 内实现真正可复用的本地检索 runtime：
+>   - index item registry
+>   - BM25 / sparse lexical scorer
+>   - cached dense vector scorer，优先复用现有本地 embedding/cache artifact；没有 cache 时降级 lexical，不调用外部服务
+>   - RRF fusion
+>   - constraint / style / scene signature scoring
+>   - metadata filter / forbidden veto
+> - 替代当前 `native_lightweight` 的简单 overlap 排序，保留旧 lightweight 作为 debug baseline。
+> - 新增或升级 CLI：
+>   - `index build`
+>   - `index inspect`
+>   - `retrieval search`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 验收：
+>   - `retrieval run --split test --limit 60` 生成标准 `run_rows`。
+>   - critical retrieval path 不 import `mocktesting.mock_retriever`。
+>   - 与 mocktesting 代表性输出对比：row count、top-k shape、target rank、stage hit、style violation 可解释。
+>
+> ### Round 2：核心 Evaluation 命令原生化
+>
+> - 用 Round 1 的 native retrieval runtime 迁移：
+>   - `evaluate`
+>   - `evaluate-hybrid`
+>   - `evaluate-graded`
+>   - `evaluate-pooled`
+>   - `compare-ranking-workflows`
+>   - `validate-ranking-keys`
+> - 评估统一走 artifact-first：
+>   - retrieval 先产出 `run_rows`
+>   - workflow rerank 在 `run_rows` 上派生
+>   - qrels / metrics / report 独立计算
+> - 默认报告保留 JSON + Markdown；debug 大字段默认关闭。
+> - 验收：
+>   - 上述命令不再走 compat。
+>   - `compare-ranking-workflows --split test --limit 60` 与 mocktesting 指标差异有 parity report。
+>   - latency、case count、run count、metric deltas 写入实验记录。
+>
+> ### Round 3：Query Understanding / Fuzzy / Paraphrase 主链迁移
+>
+> - 以现有 native planner registry 为入口，迁移：
+>   - `compare-query-understanding`
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `evaluate-fuzzy-multirelevance`
+>   - `validate-scene-signature`
+> - fuzzy 评估默认使用 graded / multi-relevance 指标：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - `multi_query`、`hyde_card`、`rule` planner 都必须通过 negative leak 检查。
+> - 验收：
+>   - fuzzy/paraphrase 命令不走 compat。
+>   - `negative_leak_rate = 0`。
+>   - 报告能区分 scene-level、purpose-level、stage-level 成功。
+>   - 与 mocktesting 对照生成 planner delta 和 metric delta。
+>
+> ### Round 4：Rerank / LLM Judge / Hard Negative 原生化
+>
+> - 迁移：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+>   - `compare-rerank-gates`
+>   - `validate-style-negatives`
+>   - `validate-style-risk-mining`
+>   - `mine-hard-negatives`
+> - LLM 默认关闭，只支持显式 sample：
+>   - `--llm-sample-size`
+>   - `--llm-rerank-top-n`
+>   - `--judge-cache`
+>   - fake client 用于测试
+> - 不做人工标注队列；qrels 裁决以 LLM votes 为主，保留 bootstrap / llm / conflict metadata。
+> - hard negative mining 从 native run rows 中抽取：
+>   - style violation
+>   - forbidden stage near miss
+>   - top1 wins target 的 close-call case
+>   - planner disagreement
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - upper-bound 报告明确判断瓶颈：recall / rerank / query understanding / qrels trust。
+>   - hard negative pool 可回灌下一轮 eval。
+>
+> ### Round 5：核心替代认证与文档收口
+>
+> - 更新 `retrieval-flywheel-guide`，默认使用 native 主链：
+>   - build native index
+>   - run native retrieval
+>   - compare workflows
+>   - build/pool qrels
+>   - evaluate fuzzy/paraphrase
+>   - mine hard negatives
+>   - compare rerank upper bound
+>   - record capability cycle
+>   - migration certify
+> - 更新 README 当前状态，明确：
+>   - mocktesting 是 baseline，不是运行依赖
+>   - core experiments 已 native
+>   - remaining compat-only 是历史/低优先命令
+> - 最终认证标准：
+>   - critical command compat count = `0`
+>   - `mocktesting_clean = true`
+>   - focused tests pass
+>   - full tests pass
+>   - native-vs-mocktesting parity report exists for each critical group
+>   - capability cycle 能记录本轮相对 origin 的能力变化
+>
+> ## Test Plan
+>
+> - 每轮固定测试：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `python -m retreieval_lab infra audit`
+>   - `python -m retreieval_lab migration audit`
+>   - `python -m retreieval_lab migration certify`
+>   - `pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp/retrieval_lab_round_<n> -p no:cacheprovider`
+> - 每个核心迁移命令新增 CLI 测试：
+>   - 默认不 import / call `mocktesting.mock_retriever`。
+>   - 输出 schema 可被 `schema validate` 接受。
+>   - JSON report 包含 `experiment.config`、`git_sha`、`elapsed_seconds`、`fingerprint`。
+> - 每轮至少跑一组 parity：
+>   - native command vs corresponding mocktesting command
+>   - 比较 summary metrics、case count、top-k shape、failure categories
+>   - 差异必须进入 parity report，不要求逐条排序完全一致。
+> - 最终 full test：
+>   - `pytest -q --basetemp .pytest-tmp/retrieval_lab_final -p no:cacheprovider`
+>   - 通过后生成 final certification report。
+>
+> ## Assumptions
+>
+> - `src/mocktesting` 永远不改、不删，只作为对照组。
+> - “完全替代”定义为核心实验主链 native，不追求所有历史命令零 compat。
+> - 不接外部向量数据库，不训练模型。
+> - LLM judge / rerank 只在显式 sample 参数下运行，默认关闭。
+> - 人工标注流程不进入主线；qrels 可信度用 bootstrap + LLM votes + conflict audit 解决。
+> - 优先迁移能提升实验真实性的能力，低价值历史命令只保留 compat 或标记 deprecated。
+</details>
+
+> PLEASE IMPLEMENT THIS PLAN:
+> # Retrieval Lab 核心替代 Mocktesting 多轮迁移计划
+>
+> ## Summary
+>
+> 目标口径采用你刚选的 **核心实验替代**：`src/mocktesting` 保持不变，继续作为对照组；但日常检索实验主链必须能由 `retreieval_lab` 原生完成，不再依赖 compat 后端。
+>
+> 最终验收不是追求所有历史命令清零，而是达成：
+>
+> - `evaluate / search / evaluate-hybrid / compare-ranking-workflows`
+> - `compare-query-understanding`
+> - `validate-fuzzy-understanding / validate-paraphrase-stress`
+> - `evaluate-fuzzy-multirelevance / evaluate-graded / evaluate-pooled`
+> - `compare-strong-baselines / compare-rerank-upper-bound`
+> - `validate-style-negatives / validate-style-risk-mining / mine-hard-negatives`
+>
+> 这些核心命令全部 native 或 artifact-native，`mocktesting` 只用于 parity 对照。
+>
+> ## Key Changes
+>
+> ### Round 0：迁移门禁与替代定义固化
+>
+> - 新增 `migration certify` 自检命令，输出：
+>   - `mocktesting_clean`
+>   - critical command native/partial/compat 状态
+>   - core replacement score
+>   - parity report paths
+>   - test result summary
+> - 将 audit 的“总体 coverage”拆成两个分数：
+>   - `legacy_command_coverage`
+>   - `core_experiment_replacement_coverage`
+> - 验收：
+>   - `src/mocktesting` 无 diff。
+>   - critical command list 固定进入 migration report。
+>   - 后续每轮都自动生成 `.tmp/retrieval_lab/migration_certification_<round>.json/md`。
+>
+> ### Round 1：原生 Retrieval Runtime
+>
+> - 在 `retreieval_lab` 内实现真正可复用的本地检索 runtime：
+>   - index item registry
+>   - BM25 / sparse lexical scorer
+>   - cached dense vector scorer，优先复用现有本地 embedding/cache artifact；没有 cache 时降级 lexical，不调用外部服务
+>   - RRF fusion
+>   - constraint / style / scene signature scoring
+>   - metadata filter / forbidden veto
+> - 替代当前 `native_lightweight` 的简单 overlap 排序，保留旧 lightweight 作为 debug baseline。
+> - 新增或升级 CLI：
+>   - `index build`
+>   - `index inspect`
+>   - `retrieval search`
+>   - `retrieval run`
+>   - `retrieval compare-legacy`
+> - 验收：
+>   - `retrieval run --split test --limit 60` 生成标准 `run_rows`。
+>   - critical retrieval path 不 import `mocktesting.mock_retriever`。
+>   - 与 mocktesting 代表性输出对比：row count、top-k shape、target rank、stage hit、style violation 可解释。
+>
+> ### Round 2：核心 Evaluation 命令原生化
+>
+> - 用 Round 1 的 native retrieval runtime 迁移：
+>   - `evaluate`
+>   - `evaluate-hybrid`
+>   - `evaluate-graded`
+>   - `evaluate-pooled`
+>   - `compare-ranking-workflows`
+>   - `validate-ranking-keys`
+> - 评估统一走 artifact-first：
+>   - retrieval 先产出 `run_rows`
+>   - workflow rerank 在 `run_rows` 上派生
+>   - qrels / metrics / report 独立计算
+> - 默认报告保留 JSON + Markdown；debug 大字段默认关闭。
+> - 验收：
+>   - 上述命令不再走 compat。
+>   - `compare-ranking-workflows --split test --limit 60` 与 mocktesting 指标差异有 parity report。
+>   - latency、case count、run count、metric deltas 写入实验记录。
+>
+> ### Round 3：Query Understanding / Fuzzy / Paraphrase 主链迁移
+>
+> - 以现有 native planner registry 为入口，迁移：
+>   - `compare-query-understanding`
+>   - `validate-fuzzy-understanding`
+>   - `validate-paraphrase-stress`
+>   - `evaluate-fuzzy-multirelevance`
+>   - `validate-scene-signature`
+> - fuzzy 评估默认使用 graded / multi-relevance 指标：
+>   - `nDCG@3/10`
+>   - `ERR@10`
+>   - `MRR@10`
+>   - `Judged@10`
+>   - scene/stage/purpose hit
+> - `multi_query`、`hyde_card`、`rule` planner 都必须通过 negative leak 检查。
+> - 验收：
+>   - fuzzy/paraphrase 命令不走 compat。
+>   - `negative_leak_rate = 0`。
+>   - 报告能区分 scene-level、purpose-level、stage-level 成功。
+>   - 与 mocktesting 对照生成 planner delta 和 metric delta。
+>
+> ### Round 4：Rerank / LLM Judge / Hard Negative 原生化
+>
+> - 迁移：
+>   - `compare-strong-baselines`
+>   - `compare-rerank-upper-bound`
+>   - `validate-rerank-gate`
+>   - `compare-rerank-gates`
+>   - `validate-style-negatives`
+>   - `validate-style-risk-mining`
+>   - `mine-hard-negatives`
+> - LLM 默认关闭，只支持显式 sample：
+>   - `--llm-sample-size`
+>   - `--llm-rerank-top-n`
+>   - `--judge-cache`
+>   - fake client 用于测试
+> - 不做人工标注队列；qrels 裁决以 LLM votes 为主，保留 bootstrap / llm / conflict metadata。
+> - hard negative mining 从 native run rows 中抽取：
+>   - style violation
+>   - forbidden stage near miss
+>   - top1 wins target 的 close-call case
+>   - planner disagreement
+> - 验收：
+>   - sample size 为 `0` 时绝不调用真实 LLM。
+>   - upper-bound 报告明确判断瓶颈：recall / rerank / query understanding / qrels trust。
+>   - hard negative pool 可回灌下一轮 eval。
+>
+> ### Round 5：核心替代认证与文档收口
+>
+> - 更新 `retrieval-flywheel-guide`，默认使用 native 主链：
+>   - build native index
+>   - run native retrieval
+>   - compare workflows
+>   - build/pool qrels
+>   - evaluate fuzzy/paraphrase
+>   - mine hard negatives
+>   - compare rerank upper bound
+>   - record capability cycle
+>   - migration certify
+> - 更新 README 当前状态，明确：
+>   - mocktesting 是 baseline，不是运行依赖
+>   - core experiments 已 native
+>   - remaining compat-only 是历史/低优先命令
+> - 最终认证标准：
+>   - critical command compat count = `0`
+>   - `mocktesting_clean = true`
+>   - focused tests pass
+>   - full tests pass
+>   - native-vs-mocktesting parity report exists for each critical group
+>   - capability cycle 能记录本轮相对 origin 的能力变化
+>
+> ## Test Plan
+>
+> - 每轮固定测试：
+>   - `git diff -- src/mocktesting` 必须为空。
+>   - `python -m retreieval_lab infra audit`
+>   - `python -m retreieval_lab migration audit`
+>   - `python -m retreieval_lab migration certify`
+>   - `pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp/retrieval_lab_round_<n> -p no:cacheprovider`
+> - 每个核心迁移命令新增 CLI 测试：
+>   - 默认不 import / call `mocktesting.mock_retriever`。
+>   - 输出 schema 可被 `schema validate` 接受。
+>   - JSON report 包含 `experiment.config`、`git_sha`、`elapsed_seconds`、`fingerprint`。
+> - 每轮至少跑一组 parity：
+>   - native command vs corresponding mocktesting command
+>   - 比较 summary metrics、case count、top-k shape、failure categories
+>   - 差异必须进入 parity report，不要求逐条排序完全一致。
+> - 最终 full test：
+>   - `pytest -q --basetemp .pytest-tmp/retrieval_lab_final -p no:cacheprovider`
+>   - 通过后生成 final certification report。
+>
+> ## Assumptions
+>
+> - `src/mocktesting` 永远不改、不删，只作为对照组。
+> - “完全替代”定义为核心实验主链 native，不追求所有历史命令零 compat。
+> - 不接外部向量数据库，不训练模型。
+> - LLM judge / rerank 只在显式 sample 参数下运行，默认关闭。
+> - 人工标注流程不进入主线；qrels 可信度用 bootstrap + LLM votes + conflict audit 解决。
+> - 优先迁移能提升实验真实性的能力，低价值历史命令只保留 compat 或标记 deprecated。
+
+<details><summary>84 previous messages</summary>
+
+> 我开始执行这个迁移飞轮。第一步会先读 `retreieval_lab` 的 CLI、coverage/audit、retrieval/index/ranking 现状，然后按最短主链补 native 能力；我会持续检查 `src/mocktesting` 不被改动。
+>
+> 我会把第一轮实现压成几个可验证的垂直切片，而不是一次性复制旧 monolith。先固定认证口径，再把 compat-only 核心命令改成原生服务入口，这样 audit 数字和实际能力会一起动。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\cli.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\experiments\coverage.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\experiments\migration.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 tests\test_retreieval_lab_cli.py`
+>
+> </details>
+>
+> 我已经确认 CLI 是一个集中分发器，当前凡是 `run_native_infra_command()` 不识别的 legacy command 都会落回 `run_mocktesting_backend()`。所以迁移的关键不是删 compat，而是让这些核心 legacy command 在 native 分发器里被截获并产出同规格报告。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\indexes\service.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\planners\service.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\ranking\rerank.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\evaluators\run_eval.py`
+>
+> </details>
+>
+> 接下来会动 `retreieval_lab` 自己的文件：新增 core command service、增强 retrieval scorer、扩展 coverage/migration certify、把 CLI 截获核心 legacy 命令。不会编辑 `src/mocktesting`。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\datasets\service.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\experiments\runs.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\evaluators\failures.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\evaluators\metrics.py`
+>
+> </details>
+>
+> 我现在准备新增一个 `core` 实验服务层：它会用现有 planner/retrieval/qrels/evaluator/ranking 组合出 native 版本的旧核心命令。这样不会把旧脚本整段搬进来，而是让旧命令名落到新架构服务上。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\qrels\service.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; rg -n "numpy|dependencies|pytest" pyproject.toml`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\reports\eval_report.py`
+>
+> </details>
+>
+> 实现会分两块一起落地：一块是“能力真的能跑”的 native core commands，另一块是“证明它能替代”的 migration certify。这样不是只把 audit 数字改好看，而是每个核心命令都实际走 Retrieval Lab 的 planner/retrieval/workflow/qrels/eval 服务。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+99 -64)
+>
+> </details>
+>
+> Stream error
+>
+> Reconnecting 1/5
+> stream disconnected before completion: stream closed before response.completed
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\experiments\flywheel.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\experiments\__init__.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\indexes\commands.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\retrieval\commands.py`
+>
+> </details>
+>
+> 先改 retrieval/index 基础能力：BM25、RRF、style/signature 组件会进入每条 result 的 `lexical_score / embedding_score / rrf_score / constraint_score / signature_score`，后面的 workflow/rerank/eval 都复用这些标准字段。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/indexes/service.py` (+22 -0)
+> - Wrote `./src/retreieval_lab/indexes/service.py` (+8 -0)
+>
+> </details>
+>
+> 现在把检索 scorer 从“词重叠 demo”升级成可组合 runtime。这里仍然是本地 in-memory，不接外部向量库；dense 部分用本地哈希向量做稳定 fallback，后面可以替换成真实 embedding cache 而不改报告结构。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/service.py` (+236 -13)
+>
+> </details>
+>
+> 核心命令服务会覆盖旧命令名本身，所以例如 `python -m retreieval_lab evaluate-hybrid ...` 不会再掉进 compat；现代别名 `python -m retreieval_lab eval hybrid ...` 也会指到同一个 native 实现。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/core.py` (+970 -0)
+>
+> </details>
+>
+> 我发现一个 Windows/Python 小坑：`Path('')` 会变成当前目录 `.`，所以 qrels 可选参数不能直接用 `Path('')` 判断。我顺手把这个防住，避免无 qrels 时误读目录。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/core.py` (+9 -4)
+>
+> </details>
+>
+> 下一步接入 coverage/migration：把“核心实验替代分数”独立出来，并新增 `migration certify`。这会让之后自检不再只看 35 个旧命令的粗口径。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+11 -1)
+>
+> </details>
+>
+> 我会让 audit 明确显示两个数字：旧命令总覆盖率，以及我们真正关心的 core experiment 覆盖率。这样以后不会再出现“架构很多但替代比例很低”的视角混淆。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+20 -1)
+>
+> </details>
+>
+> 现在新增认证命令。它不会跑长测试，但会记录 mocktesting clean、核心命令 compat 剩余数、替代分数、以及用户后续可以挂上的 parity/test 报告路径。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/migration.py` (+111 -1)
+>
+> </details>
+>
+> 接下来把 CLI 接进去。重点是：这些核心旧命令名会在 `run_native_infra_command()` 里先被 native 截获；只有非核心、低优先历史命令才会继续走 compat。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/compat.py` (+2 -0)
+>
+> </details>
+>
+> 我会保持兼容入口还在，但核心命令不再穿过去。这个姿势也方便你继续用旧命令名跑实验，不需要立刻改所有脚本。
+>
+> <details><summary>Edited 1 file, ran 1 command</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+63 -1)
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 src\retreieval_lab\retrieval\__init__.py`
+>
+> </details>
+>
+> 我会补一下 retrieval 包导出和文档里的“still being migrated”表述，否则新 runtime 已经落地但 facade 还在说旧状态，容易误导后续审计。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/retrieval/__init__.py` (+3 -5)
+>
+> </details>
+>
+> 现在先跑一小组 smoke：只检查 import、infra audit、migration certify、一个小 limit 的 native core 命令。这里如果失败，会先修正接口，不继续堆功能。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration certify --round-id smoke --output .tmp\retrieval_lab\migration_certify_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab compare-query-understanding --split test --limit 5 --query-planners rule,multi_query --output .tmp\retrieval_lab\planner_core_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab evaluate-hybrid --split test --limit 5 --output .tmp\retrieval_lab\evaluate_hybrid_smoke.json`
+>
+> </details>
+>
+> smoke 卡在一个 facade 导出问题：`write_index_manifest` 没有从 `retreieval_lab.indexes` 暴露。这个不是逻辑问题，我直接改 core 从 service 层取，避免扩大公开导出面。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/core.py` (+2 -1)
+>
+> </details>
+>
+> 继续 smoke。现在主要看三个风险：import cycle、argparse 是否兼容旧参数、native scorer 在真实 test split 上是否能完整跑完。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration certify --round-id smoke --output .tmp\retrieval_lab\migration_certify_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab evaluate-hybrid --split test --limit 5 --output .tmp\retrieval_lab\evaluate_hybrid_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab compare-query-understanding --split test --limit 5 --query-planners rule,multi_query --output .tmp\retrieval_lab\planner_core_smoke.json`
+>
+> </details>
+>
+> 核心 smoke 通过了，而且 certify 已经显示 core replacement coverage = 1.0，剩余 compat-only 只剩 `evaluate-leave-one-fixture-out` 和 `tune-constraints` 这两个非主链历史命令。现在我跑 focused tests，看看旧断言有没有被新覆盖率数字影响。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_focus -p no:cacheprovider`
+>
+> </details>
+>
+> 测试收集暴露了一个 import cycle：coverage 为了拿核心命令集合导入 core，core 又导入 evaluators。解决方式是把核心命令集合抽到轻量 constants，不让 audit 层导入执行层。
+>
+> <details><summary>Created 1 file, edited 2 files</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/constants.py` (+34 -0)
+> - Wrote `./src/retreieval_lab/experiments/core.py` (+1 -29)
+> - Wrote `./src/retreieval_lab/experiments/coverage.py` (+1 -1)
+>
+> </details>
+>
+> 我还会让 migration 也依赖 constants，而不是依赖 core 执行层；这样审计/认证命令保持轻量，不会因为检索执行依赖变化影响测试收集。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/migration.py` (+1 -1)
+>
+> </details>
+>
+> 还有一层包级 `experiments.__init__` 会提前导入 core，这也会在 tests 先导入 evaluators 时形成环。我把执行层从包级 facade 里拿掉，CLI 直接按模块导入它。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/__init__.py` (+0 -3)
+>
+> </details>
+>
+> CLI 现在改成显式从 `experiments.constants/core` 导入，避免普通评估模块加载时牵出整个核心执行层。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/cli.py` (+2 -2)
+>
+> </details>
+>
+> 导入环处理完了。重新跑 focused tests；如果老测试里有“旧覆盖率必须低”的断言，我会把它更新成“仍有非核心 compat，但 core 覆盖为 1.0”。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_focus -p no:cacheprovider`
+>
+> </details>
+>
+> focused 旧测试全部通过了。现在我补新测试来锁住这次迁移：core 命令不能走 mocktesting、certify 要显示 critical compat 为 0、native fuzzy/rerank/hard-negative 命令能出标准报告。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Tail 80 -Encoding UTF8 tests\test_retreieval_lab_cli.py`
+>
+> </details>
+>
+> 新增测试会使用现有的小数据集 fixture，不依赖真实大测试集；这样迁移自检足够快，也不会触发 LLM。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+84 -0)
+>
+> </details>
+>
+> 我看到测试里有一行临时占位断言，删掉，避免留下“永真”的测试味道。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./tests/test_retreieval_lab_cli.py` (+0 -1)
+>
+> </details>
+>
+> 测试补好了，继续跑 focused。之后再跑一组真实 limit60 核心命令，确认不是只在 tiny fixture 上过。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_focus -p no:cacheprovider`
+>
+> </details>
+>
+> focused 现在是 56 passed。接下来跑真实 `test --limit 60` 的核心链路：hybrid、fuzzy、paraphrase、rerank upper bound、hard negative mining、certify。这个更接近你的日常实验。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab evaluate-hybrid --split test --limit 60 --output .tmp\retrieval_lab\evaluate_hybrid_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab validate-fuzzy-understanding --split test --limit 60 --output .tmp\retrieval_lab\fuzzy_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab compare-rerank-upper-bound --split test --limit 60 --output .tmp\retrieval_lab\rerank_upper_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab validate-paraphrase-stress --split test --limit 60 --output .tmp\retrieval_lab\paraphrase_test60_native.json`
+>
+> </details>
+>
+> 真实 60 case 跑通了：native hybrid 和 rerank 很强，fuzzy 的 scene@10 到 0.70，但 stage/purpose 降到 0.637，说明我们生成的 fuzzy 变体比原 mocktesting 更“抽象”，后续需要把 fuzzy 多解主评估看作 nDCG/qrels 而不是单 stage。先把剩余 hard-negative/certify 跑完。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab mine-hard-negatives --split test --limit 60 --output .tmp\retrieval_lab\hard_negatives_test60_native.json --hard-negatives-output .tmp\retrieval_lab\hard_negatives_test60_native.jsonl`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab evaluate-fuzzy-multirelevance --split test --limit 60 --output .tmp\retrieval_lab\fuzzy_multi_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git diff -- src\mocktesting`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration certify --round-id final_native_core --output .tmp\retrieval_lab\migration_certification_final_native_core.json --markdown-output .tmp\retrieval_lab\migration_certification_final_native_core.md --parity-reports .tmp\retrieval_lab\evaluate_hybrid_test60_native.json .tmp\retrieval_lab\fuzzy_test60_native.json .tmp\retrieval_lab\paraphrase_test60_native.json .tmp\retrieval_lab\rerank_upper_test60_native.json`
+>
+> </details>
+>
+> 文档和 flywheel 现在还带着 “run legacy” 作为默认步骤，这已经不符合新状态。我会把默认飞轮改成 native 主链，并在 README 里明确 core commands 已经原生，剩余 compat 是非主链历史项。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/experiments/flywheel.py` (+14 -8)
+>
+> </details>
+>
+> README 也需要同步状态。这里我只改关键状态段和示例命令，不大段重写，避免文档噪声。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `./src/retreieval_lab/README.md` (+12 -4)
+>
+> </details>
+>
+> 我再补跑 qrels 主链 smoke：`build-pooled-qrels` 和 `sample-active-qrels` 现在也应该是 ranking-first native，不再走 compat。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab build-pooled-qrels --split test --limit 20 --qrels-output .tmp\retrieval_lab\pooled_native_smoke.jsonl --output .tmp\retrieval_lab\pooled_native_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab sample-active-qrels --split test --limit 20 --sample-size 10 --qrels .tmp\retrieval_lab\pooled_native_smoke.jsonl --output .tmp\retrieval_lab\active_native_smoke.jsonl`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab search --split test --limit 20 --query "不要广告感，要真实现场铺垫" --output .tmp\retrieval_lab\search_native_smoke.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration audit --round-id native_core --output .tmp\retrieval_lab\migration_audit_native_core.json`
+>
+> </details>
+>
+> qrels/search 主链也通了，输出都标记 `compat_backend_used=false`。现在进入自检收尾：focused 已过，接下来跑全量 pytest，然后检查 `src/mocktesting` diff 仍为空。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git status --short`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git diff -- src\mocktesting`
+>
+> </details>
+>
+> `src/mocktesting` diff 为空，状态干净。全量测试可能会跑一会儿，我会用 workspace 内 basetemp，避免之前那个系统临时目录权限问题。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; pytest -q --basetemp .pytest-tmp\retrieval_lab_final -p no:cacheprovider`
+>
+> </details>
+>
+> 全量测试通过：192 passed。最后我重新生成一次最终 certify/audit，把测试后的最新代码状态写到 `.tmp/retrieval_lab`，并再确认 mocktesting 仍无 diff。
+>
+> <details><summary>Ran 4 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab infra audit --output .tmp\retrieval_lab\infra_audit_final_native_core.json --markdown-output .tmp\retrieval_lab\infra_audit_final_native_core.md`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab migration certify --round-id final_native_core --output .tmp\retrieval_lab\migration_certification_final_native_core.json --markdown-output .tmp\retrieval_lab\migration_certification_final_native_core.md --parity-reports .tmp\retrieval_lab\evaluate_hybrid_test60_native.json .tmp\retrieval_lab\fuzzy_test60_native.json .tmp\retrieval_lab\paraphrase_test60_native.json .tmp\retrieval_lab\rerank_upper_test60_native.json .tmp\retrieval_lab\fuzzy_multi_test60_native.json`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git diff -- src\mocktesting`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git diff --stat`
+>
+> </details>
+>
+> 最终 certify 是 true，核心替代覆盖率 1.0，总体 legacy command coverage 0.942857；只剩两个非核心历史命令仍 compat。现在我看一下包含新增文件的状态，然后做最后的结果梳理。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; git status --short`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Raw -Encoding UTF8 .tmp\retrieval_lab\migration_certification_final_native_core.json`
+>
+> </details>
+>
+> 认证报告列出了 26 个 critical command，全是 native；`critical_compat_commands` 为空。剩下我会做一个小的源码检索，确保新 core 执行层没有直接调用 `mocktesting.mock_retriever`。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; rg -n "mocktesting\.mock_retriever|run_mocktesting_backend|legacy_main" src\retreieval_lab\experiments\core.py src\retreieval_lab\retrieval\service.py src\retreieval_lab\cli.py`
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; rg -n "CORE_EXPERIMENT_COMMANDS|core_experiment_replacement_coverage|migration-certify|native_core_experiment" src\retreieval_lab`
+>
+> </details>
+>
+> 源码检索确认：新 core 执行层和 retrieval runtime 没有直接调用 `mocktesting.mock_retriever`；compat fallback 只留在 CLI 最后的兜底。最后再跑一次 flywheel guide，确认文档命令能生成。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; python -m retreieval_lab flywheel guide --output .tmp\retrieval_lab\flywheel_guide_final_native_core.json`
+>
+> </details>
+>
+> flywheel guide 也正常。因为我改过 guide 文案后还没重跑 focused，我再跑一次 focused，避免最后一分钟文档命令测试漂移。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_focus_final -p no:cacheprovider`
+>
+> </details>
+>
+> <details><summary>Plan</summary>
+>
+> - [ ] Inspect current Retrieval Lab CLI and migration gaps
+> - [ ] Implement migration certification gate and core coverage scoring
+> - [ ] Implement native retrieval runtime and command aliases for core search/evaluate path
+> - [ ] Migrate evaluation, fuzzy/paraphrase, rerank, style/hard-negative core commands to native artifact flow
+> - [ ] Update guide/README and add focused tests
+> - [ ] Run audit, parity smoke checks, and full tests without touching mocktesting
+>
+> </details>
+</details>
+
+已按“核心实验替代”口径完成迁移：`mocktesting` 没有被改，仍作为对照组；但核心日常实验命令现在已经由 `retreieval_lab` native 截获执行，不再落到 compat 后端。
+
+关键结果：
+
+- 核心命令替代：`26/26` native，`critical_command_compat_count = 0`
+- 总 legacy 覆盖：`33/35` native，coverage `0.942857`
+- 剩余 compat-only：`evaluate-leave-one-fixture-out`、`tune-constraints`，都不是这轮定义的核心主链
+- `mocktesting_clean = true`
+- 最终认证：`certified = true`
+
+主要实现：
+
+- 新增 native core 实验层：[core.py](./src/retreieval_lab/experiments/core.py)
+- 新增核心命令集合常量：[constants.py](./src/retreieval_lab/experiments/constants.py)
+- 升级 native retrieval runtime：[service.py](./src/retreieval_lab/retrieval/service.py)
+  - BM25-style lexical
+  - 本地 hash dense fallback
+  - RRF fusion
+  - constraint/style/signature scoring
+- 新增 migration certify：[migration.py](./src/retreieval_lab/experiments/migration.py)
+- CLI 核心命令 native 截获：[cli.py](./src/retreieval_lab/cli.py)
+- 更新飞轮和 README：[README.md](./src/retreieval_lab/README.md)
+
+验证结果：
+
+- `pytest -q tests/test_retreieval_lab_cli.py --basetemp .pytest-tmp\retrieval_lab_focus_final -p no:cacheprovider`
+  - `56 passed`
+- `pytest -q --basetemp .pytest-tmp\retrieval_lab_final -p no:cacheprovider`
+  - `192 passed`
+- `git diff -- src\mocktesting`
+  - 空输出，未修改对照组
+
+真实 test60 native 实验结果也跑了：
+
+- `evaluate-hybrid`: `target_recall_at_10 = 1.0`, `nDCG@10 = 0.939825`
+- `validate-fuzzy-understanding`: `scene_level_recall_at_10 = 0.7`, `negative_leak_rate = 0`
+- `validate-paraphrase-stress`: `target_recall_at_10 = 0.979167`
+- `compare-rerank-upper-bound`: `baseline_nDCG@10 = 0.951534`, `oracle_rerank_nDCG@10 = 1.0`
+- `mine-hard-negatives`: mined `9` hard negatives
+
+最终报告：
+
+- [migration_certification_final_native_core.json](./.tmp/retrieval_lab/migration_certification_final_native_core.json)
+- [infra_audit_final_native_core.json](./.tmp/retrieval_lab/infra_audit_final_native_core.json)
+
+还有一个值得注意的质量信号：native fuzzy 的 exact scene@10 达到 `0.70`，但 stage/purpose@3 只有 `0.636667`，说明这版 fuzzy 变体更抽象，后续应该继续用 graded qrels / nDCG 评估多解，而不是只看单 target。核心替代已经完成，下一步更像是“质量调优”，不是“迁移补洞”。
+
+> 你认为现在实验架构非常完善了吗？
+
+我会说：**现在实验架构已经很完整，足够支撑主线检索迭代了，但还不能叫“非常完善”**。
+
+更准确的判断是：
+
+- **架构完备度：8.5/10**
+- **核心实验可替代性：9/10**
+- **评测可信度：7/10**
+- **检索质量成熟度：7/10**
+- **企业级/论文级严谨度：还差一层**
+
+这轮之后，最重要的变化是：`retreieval_lab` 已经不是“好看的外壳”了。核心实验命令已经 native，`core_experiment_replacement_coverage = 1.0`，`mocktesting` 也保持干净。也就是说，日常实验主链现在可以靠 Retrieval Lab 自己跑：
+
+`evaluate-hybrid / fuzzy / paraphrase / rerank upper bound / hard negatives / qrels / certification`
+
+这已经是一个真正的检索实验平台骨架。
+
+但我不会说它“非常完善”，原因有三个：
+
+1. **qrels trust 仍然低**
+   目前很多 qrels 还是 bootstrap 生成，缺少 LLM judge 覆盖。指标能跑，但可信度还没完全上来。
+
+2. **native dense 还只是本地 hash fallback**
+   现在 retrieval runtime 结构对了，但 dense/vector 部分还不是正式 embedding cache 或 ANN。它适合作为 native baseline，不代表最终语义检索能力。
+
+3. **fuzzy 结果暴露了下一层问题**
+   `scene@10 = 0.70` 不错，但 fuzzy 的 `stage/purpose@3 = 0.636667` 偏低。说明平台能测出问题了，但检索理解和多解评估还要继续优化。
+
+所以我的结论是：
+
+> **作为“检索实验平台”，现在已经进入成熟可用阶段；作为“高可信、可发表/可长期指导策略迭代的平台”，还差 LLM judge、真实 dense retrieval、CI gate 和更稳定的 fuzzy 多解 qrels。**
+
+最值得下一步做的不是继续大迁移，而是补可信闭环：
+
+1. LLM judge qrels 覆盖关键失败样本。
+2. 接入真实 embedding cache / dense channel。
+3. 建立 `eval gate`，每轮自动判断能力涨跌。
+4. 针对 fuzzy stage/purpose 低的问题做 failure attribution 和 planner/ranking 调参。
+
+一句话：**平台现在已经“能打”了，但还没到“结果可以闭眼信”的程度。**
+
+> 好的，请设计实验计划，并自行实验，最终报告结果
